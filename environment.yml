@@ -1,0 +1,23 @@
+name: mai 
+channels:
+    - anaconda
+    - conda-forge
+    - pytorch
+dependencies:
+    - python=3.9
+    - pip
+    - numpy
+    - numpy-base
+    - matplotlib
+    - matplotlib-base
+    - scipy
+    - scikit-image
+    - pytorch
+    - torchvision
+    - torchaudio
+    - pandas
+    - seaborn
+    - tqdm
+    - cudatoolkit=11.6
+    - ipykernel
+    - jupyter
