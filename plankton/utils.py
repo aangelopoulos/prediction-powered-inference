@@ -12,6 +12,29 @@ import os
 import copy
 from tqdm import tqdm
 
+def get_dataset(data_dir, pct_val):
+    input_size = 224
+    train_transform = transforms.Compose([
+        transforms.RandomResizedCrop(input_size),
+        transforms.RandomHorizontalFlip(),
+        transforms.ToTensor(),
+        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+    ])
+
+    val_transform = transforms.Compose([
+            transforms.Resize(input_size),
+            transforms.CenterCrop(input_size),
+            transforms.ToTensor(),
+            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+    ])
+    dataset = datasets.ImageFolder(data_dir, train_transform)
+    num_train = int((1-pct_val)*len(dataset))
+    train_dataset, val_dataset = torch.utils.data.random_split(dataset, [num_train, len(dataset)-num_train])
+    train_dataset.dataset.transform = train_transform
+    val_dataset.dataset.transform = val_transform
+    return train_dataset, val_dataset
+
+
 def train_model(model, dataloaders, criterion, optimizer, num_epochs=25):
     since = time.time()
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -24,8 +47,9 @@ def train_model(model, dataloaders, criterion, optimizer, num_epochs=25):
     for epoch in range(num_epochs):
         print('Epoch {}/{}'.format(epoch, num_epochs - 1))
         print('-' * 10)
+        
 
-        # Each epoch has a training and validation phase
+        # Each epoch has  If you just would like to load a single image, you could load it with e.g. PIL.Image.open and pass it to your transform.a training and validation phase
         for phase in ['train', 'val']:
             if phase == 'train':
                 model.train()  # Set model to training mode
@@ -34,11 +58,14 @@ def train_model(model, dataloaders, criterion, optimizer, num_epochs=25):
 
             running_loss = 0.0
             running_corrects = 0
+            count = 0
 
             # Iterate over data.
             for inputs, labels in tqdm(dataloaders[phase]):
                 inputs = inputs.to(device)
                 labels = labels.to(device)
+                
+                count += labels.shape[0]
 
                 # zero the parameter gradients
                 optimizer.zero_grad()
@@ -60,6 +87,11 @@ def train_model(model, dataloaders, criterion, optimizer, num_epochs=25):
                 # statistics
                 running_loss += loss.item() * inputs.size(0)
                 running_corrects += torch.sum(preds == labels.data)
+                
+                print(f"Loss in this batch: {loss.item()}")
+                print(f"Fraction correct in this batch: {torch.sum(preds==labels.data).float()/labels.shape[0]}")
+                print(f"Preds in this batch: {preds}")
+                print(f"Labels in this batch: {labels}")
 
             epoch_loss = running_loss / len(dataloaders[phase].dataset)
             epoch_acc = running_corrects.double() / len(dataloaders[phase].dataset)
@@ -73,7 +105,6 @@ def train_model(model, dataloaders, criterion, optimizer, num_epochs=25):
             if phase == 'val':
                 val_acc_history.append(epoch_acc)
 
-        print()
 
     time_elapsed = time.time() - since
     print('Training complete in {:.0f}m {:.0f}s'.format(time_elapsed // 60, time_elapsed % 60))
