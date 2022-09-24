@@ -5,12 +5,12 @@ import torchvision as tv
 import matplotlib.pyplot as plt
 from collections import Counter
 from tqdm import tqdm
-from utils import save_checkpoint, get_dataset, train_model
+from utils import save_checkpoint, get_train_val_split, train_model
 
 if __name__ == "__main__":
-  # Get data 2006-2014 from the following link: https://darchive.mblwhoilibrary.org/handle/1912/7341
+  # Get data 2006-2013 from the following link: https://darchive.mblwhoilibrary.org/handle/1912/7341
   # Unzip and merge the datasets in the following directory
-  data_dir = '~/mai_datasets/plankton/merged'
+  data_dir = '~/mai_datasets/plankton/merged-2006-2013'
   
   # Pct Val
   pct_val = 0.2
@@ -28,12 +28,17 @@ if __name__ == "__main__":
   print("Initializing Datasets and Dataloaders...")
   
   # Create training and validation datasets
-  train_dataset, val_dataset = get_dataset(data_dir, pct_val)
+  train_dataset, val_dataset = get_train_val_split(data_dir, pct_val)
 
   # Initialize dataloaders
+  def collate_fn(batch):
+    batch = list(filter(lambda x: x is not None, batch))
+    return torch.utils.data.dataloader.default_collate(batch)
+
   num_classes = len(train_dataset.dataset.classes)
-  train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=0)
-  val_dataloader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=True, num_workers=0)
+  print(f"The number of classes is {num_classes}")
+  train_dataloader = torch.utils.data.DataLoader(train_dataset, collate_fn=collate_fn, batch_size=batch_size, shuffle=True, num_workers=0)
+  val_dataloader = torch.utils.data.DataLoader(val_dataset, collate_fn=collate_fn, batch_size=batch_size, shuffle=True, num_workers=0)
   
   # Detect if we have a GPU available
   device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -79,4 +84,4 @@ if __name__ == "__main__":
   
   # Train and evaluate
   model_ft, hist = train_model(model_ft, {'train': train_dataloader, 'val': val_dataloader}, criterion, optimizer_ft, num_epochs=num_epochs)
-  save_checkpoint(model_ft, hist)
+  save_checkpoint(model_ft.cpu(), hist)

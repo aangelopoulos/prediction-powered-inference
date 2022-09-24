@@ -27,7 +27,7 @@ class RobustImageFolder(datasets.ImageFolder):
       sample = self.loader(path)
     except:
       print(f"Damaged image encountered at {path}!")
-      pass
+      return None
     if self.transform is not None:
       sample = self.transform(sample)
     if self.target_transform is not None:
@@ -39,7 +39,21 @@ def save_checkpoint(model_ft, hist):
   torch.save(model_ft.state_dict(), './models/model_v3.pth')
   torch.save(hist, './models/hist_v3.pth')
 
-def get_dataset(data_dir, pct_val):
+
+def get_test_dataset(data_dir):
+    input_size = 224
+    transform = transforms.Compose([
+            transforms.Resize(input_size),
+            transforms.CenterCrop(input_size),
+            transforms.ToTensor(),
+            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+    ])
+    dataset = RobustImageFolder(data_dir, transform)
+    return dataset
+
+def get_train_val_split(data_dir, pct_val):
+    curr_seed = torch.seed()
+    torch.manual_seed(0)
     input_size = 224
     train_transform = transforms.Compose([
         transforms.RandomResizedCrop(input_size),
@@ -59,6 +73,7 @@ def get_dataset(data_dir, pct_val):
     train_dataset, val_dataset = torch.utils.data.random_split(dataset, [num_train, len(dataset)-num_train])
     train_dataset.dataset.transform = train_transform
     val_dataset.dataset.transform = val_transform
+    torch.manual_seed(curr_seed)
     return train_dataset, val_dataset
 
 
@@ -71,10 +86,11 @@ def train_model(model, dataloaders, criterion, optimizer, num_epochs=25):
     best_model_wts = copy.deepcopy(model.state_dict())
     best_acc = 0.0
 
+    code = np.random.choice(99)
+
     for epoch in range(num_epochs):
         print('Epoch {}/{}'.format(epoch, num_epochs - 1))
         print('-' * 10)
-        # Each epoch has  If you just would like to load a single image, you could load it with e.g. PIL.Image.open and pass it to your transform.a training and validation phase
         for phase in ['train', 'val']:
             if phase == 'train':
                 model.train()  # Set model to training mode
@@ -123,6 +139,10 @@ def train_model(model, dataloaders, criterion, optimizer, num_epochs=25):
                     uq_labels, counts_labels = torch.unique(labels, return_inverse=False, return_counts=True)
                     print("Preds in this batch: " + str({dataloaders[phase].dataset.dataset.classes[uq_preds[i].item()] : counts_preds[i].item() for i in range(uq_preds.shape[0])}))
                     print("Labels in this batch: " + str({dataloaders[phase].dataset.dataset.classes[uq_labels[i].item()] : counts_labels[i].item() for i in range(uq_labels.shape[0])}))
+
+                if count % 50 == 0:
+                    print(f"Saving model!")
+                    torch.save(best_model_wts, "./models/" + str(code) + "ckpt.pth")
 
                 count += labels.shape[0]
 
