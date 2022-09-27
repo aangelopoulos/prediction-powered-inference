@@ -10,7 +10,7 @@ from utils import save_checkpoint, get_train_val_split, train_model
 if __name__ == "__main__":
   # Get data 2006-2013 from the following link: https://darchive.mblwhoilibrary.org/handle/1912/7341
   # Unzip and merge the datasets in the following directory
-  data_dir = '~/mai_datasets/plankton/merged-2006-2013'
+  data_dir = '~/mai_datasets/plankton/merged-2006-2012'
   
   # Pct Val
   pct_val = 0.2

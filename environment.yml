@@ -17,6 +17,7 @@ dependencies:
     - torchaudio
     - pandas
     - seaborn
+    - scikit-learn
     - tqdm
     - cudatoolkit=11.6
     - ipykernel
