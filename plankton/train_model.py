@@ -6,14 +6,16 @@ import matplotlib.pyplot as plt
 from collections import Counter
 from tqdm import tqdm
 from utils import save_checkpoint, get_train_val_split, train_model
+import pdb
 
 if __name__ == "__main__":
   # Get data 2006-2013 from the following link: https://darchive.mblwhoilibrary.org/handle/1912/7341
   # Unzip and merge the datasets in the following directory
-  data_dir = '~/mai_datasets/plankton/merged-2006-2012'
+  data_dir = '/home/group/mai_datasets/plankton/merged-2006-2012'
   
   # Pct Val
   pct_val = 0.2
+  binary = True 
   
   # Batch size for training (change depending on how much memory you have)
   batch_size = 512
@@ -28,7 +30,7 @@ if __name__ == "__main__":
   print("Initializing Datasets and Dataloaders...")
   
   # Create training and validation datasets
-  train_dataset, val_dataset = get_train_val_split(data_dir, pct_val)
+  train_dataset, val_dataset = get_train_val_split(data_dir, pct_val, binary=binary)
 
   # Initialize dataloaders
   def collate_fn(batch):
@@ -36,6 +38,7 @@ if __name__ == "__main__":
     return torch.utils.data.dataloader.default_collate(batch)
 
   num_classes = len(train_dataset.dataset.classes)
+
   print(f"The number of classes is {num_classes}")
   train_dataloader = torch.utils.data.DataLoader(train_dataset, collate_fn=collate_fn, batch_size=batch_size, shuffle=True, num_workers=0)
   val_dataloader = torch.utils.data.DataLoader(val_dataset, collate_fn=collate_fn, batch_size=batch_size, shuffle=True, num_workers=0)

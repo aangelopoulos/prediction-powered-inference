@@ -10,17 +10,18 @@ from utils import get_test_dataset
 if __name__ == "__main__":
   # Get data 2006-2013 from the following link: https://darchive.mblwhoilibrary.org/handle/1912/7341
   # Unzip and merge the datasets in the following directory
-  model_data_dir = '~/mai_datasets/plankton/merged-2006-2012'
-  calib_data_dir = '~/mai_datasets/plankton/no-empties-2013'
-  test_data_dir = '~/mai_datasets/plankton/2014'
+  model_data_dir = '/home/group/mai_datasets/plankton/merged-2006-2012'
+  calib_data_dir = '/home/group/mai_datasets/plankton/no-empties-2013'
+  test_data_dir = '/home/group/mai_datasets/plankton/2014'
+  binary = True
 
   # Batch size for training (change depending on how much memory you have)
   batch_size = 512
   
   # Create training, calibration, and test datasets
-  train_dataset = get_test_dataset(model_data_dir)
-  calib_dataset = get_test_dataset(calib_data_dir)
-  test_dataset = get_test_dataset(test_data_dir)
+  train_dataset = get_test_dataset(model_data_dir, binary=binary)
+  calib_dataset = get_test_dataset(calib_data_dir, binary=binary)
+  test_dataset = get_test_dataset(test_data_dir, binary=binary)
 
   # Initialize dataloaders
   def collate_fn(batch):
@@ -44,7 +45,7 @@ if __name__ == "__main__":
   
   # Send the model to GPU
   model_ft = model_ft.to(device)
-  model_ft.load_state_dict(torch.load('./models/model_v4.pth'))
+  model_ft.load_state_dict(torch.load('./models/model_v5.pth'))
   model_ft.eval()
   
   # Calculate outputs 

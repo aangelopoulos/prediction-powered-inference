@@ -36,11 +36,11 @@ class RobustImageFolder(datasets.ImageFolder):
 
 def save_checkpoint(model_ft, hist):
   os.makedirs('./models/', exist_ok=True)
-  torch.save(model_ft.state_dict(), './models/model_v4.pth')
-  torch.save(hist, './models/hist_v4.pth')
+  torch.save(model_ft.state_dict(), './models/model_v5.pth')
+  torch.save(hist, './models/hist_v5.pth')
 
 
-def get_test_dataset(data_dir):
+def get_test_dataset(data_dir, binary=False):
     input_size = 224
     transform = transforms.Compose([
             transforms.Resize(input_size),
@@ -48,10 +48,20 @@ def get_test_dataset(data_dir):
             transforms.ToTensor(),
             transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
     ])
-    dataset = RobustImageFolder(data_dir, transform)
+    target_transform = None
+    if binary:
+        all_classes = np.load('./classes.npy')
+        plankton_classes = np.where(np.isin(all_classes, ['mix','mix_elongated','detritus','bad', 'bead', 'bubble', 'other_interaction', 'pollen', 'spore']))[0]
+        target_transform = transforms.Compose([ lambda x: int(np.isin(x,plankton_classes)) ])
+
+    dataset = RobustImageFolder(data_dir, transform=transform, target_transform=target_transform)
+
+    if binary:
+        dataset.classes = ['nonplankton', 'plankton']
+        dataset.class_to_idx = { 'nonplankton' : 0, 'plankton' : 1 }
     return dataset
 
-def get_train_val_split(data_dir, pct_val):
+def get_train_val_split(data_dir, pct_val, binary=False):
     curr_seed = torch.seed()
     torch.manual_seed(0)
     input_size = 224
@@ -68,7 +78,17 @@ def get_train_val_split(data_dir, pct_val):
             transforms.ToTensor(),
             transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
     ])
-    dataset = RobustImageFolder(data_dir, train_transform)
+
+    target_transform = None
+    if binary:
+        all_classes = np.load('./classes.npy')
+        plankton_classes = np.where(np.isin(all_classes, ['mix','mix_elongated','detritus','bad', 'bead', 'bubble', 'other_interaction', 'pollen', 'spore']))[0]
+        target_transform = transforms.Compose([ lambda x: int(np.isin(x,plankton_classes)) ])
+
+
+    dataset = RobustImageFolder(data_dir, transform = train_transform, target_transform = target_transform)
+    if binary:
+        dataset.classes = ['nonplankton', 'plankton']
     num_train = int((1-pct_val)*len(dataset))
     train_dataset, val_dataset = torch.utils.data.random_split(dataset, [num_train, len(dataset)-num_train])
     train_dataset.dataset.transform = train_transform
@@ -105,7 +125,6 @@ def train_model(model, dataloaders, criterion, optimizer, num_epochs=25):
             for inputs, labels in tqdm(dataloaders[phase]):
                 inputs = inputs.to(device)
                 labels = labels.to(device)
-                
                 # zero the parameter gradients
                 optimizer.zero_grad()
 
