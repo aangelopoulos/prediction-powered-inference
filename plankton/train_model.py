@@ -14,18 +14,18 @@ if __name__ == "__main__":
   data_dir = '/home/group/mai_datasets/plankton/merged-2006-2012'
   
   # Pct Val
-  pct_val = 0.2
-  binary = True 
+  pct_val = 0.05
+  binary = False 
   
   # Batch size for training (change depending on how much memory you have)
-  batch_size = 512
+  batch_size = 32 
   
   # Number of epochs to train for
-  num_epochs = 1
+  num_epochs = 2 
   
   # Flag for feature extracting. When False, we finetune the whole model,
   #   when True we only update the reshaped layer params
-  feature_extract = True 
+  feature_extract = False 
   
   print("Initializing Datasets and Dataloaders...")
   
@@ -53,7 +53,7 @@ if __name__ == "__main__":
       for param in model.parameters():
         param.requires_grad = False
   
-  model_ft = tv.models.resnet18(pretrained=True)
+  model_ft = tv.models.resnet152(pretrained=True)
   set_parameter_requires_grad(model_ft, feature_extract)
   num_ftrs = model_ft.fc.in_features
   model_ft.fc = torch.nn.Linear(num_ftrs, num_classes)

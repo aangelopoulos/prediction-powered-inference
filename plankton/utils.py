@@ -36,8 +36,8 @@ class RobustImageFolder(datasets.ImageFolder):
 
 def save_checkpoint(model_ft, hist):
   os.makedirs('./models/', exist_ok=True)
-  torch.save(model_ft.state_dict(), './models/model_v5.pth')
-  torch.save(hist, './models/hist_v5.pth')
+  torch.save(model_ft.state_dict(), './models/model_v6.pth')
+  torch.save(hist, './models/hist_v6.pth')
 
 
 def get_test_dataset(data_dir, binary=False):

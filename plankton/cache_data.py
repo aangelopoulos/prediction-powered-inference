@@ -13,7 +13,7 @@ if __name__ == "__main__":
   model_data_dir = '/home/group/mai_datasets/plankton/merged-2006-2012'
   calib_data_dir = '/home/group/mai_datasets/plankton/no-empties-2013'
   test_data_dir = '/home/group/mai_datasets/plankton/2014'
-  binary = True
+  binary = False 
 
   # Batch size for training (change depending on how much memory you have)
   batch_size = 512
@@ -39,13 +39,13 @@ if __name__ == "__main__":
   device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
   print(f"Using device {device}")
   
-  model_ft = tv.models.resnet18(pretrained=True)
+  model_ft = tv.models.resnet152(pretrained=True)
   num_ftrs = model_ft.fc.in_features
   model_ft.fc = torch.nn.Linear(num_ftrs, num_classes)
   
   # Send the model to GPU
   model_ft = model_ft.to(device)
-  model_ft.load_state_dict(torch.load('./models/model_v5.pth'))
+  model_ft.load_state_dict(torch.load('./models/model_v6.pth'))
   model_ft.eval()
   
   # Calculate outputs 
