@@ -1,0 +1,10 @@
+random-sample-calibration.ipynb filter=lfs diff=lfs merge=lfs -text
+idr-benchmark-alphafold-annotation.csv filter=lfs diff=lfs merge=lfs -text
+accessibility_df.csv filter=lfs diff=lfs merge=lfs -text
+disordered_data_annotation.csv filter=lfs diff=lfs merge=lfs -text
+idr-benchmark-groundtruth.csv filter=lfs diff=lfs merge=lfs -text
+iupred2_df.csv filter=lfs diff=lfs merge=lfs -text
+ordered_data_annotation.csv filter=lfs diff=lfs merge=lfs -text
+phosphositeplus_annotation.csv filter=lfs diff=lfs merge=lfs -text
+ptm_idr_df.csv filter=lfs diff=lfs merge=lfs -text
+RSA_data.csv filter=lfs diff=lfs merge=lfs -text
