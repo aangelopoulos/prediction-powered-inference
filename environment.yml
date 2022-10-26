@@ -22,3 +22,5 @@ dependencies:
     - cudatoolkit=11.6
     - ipykernel
     - jupyter
+    - pip:
+      - folktables
