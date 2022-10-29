@@ -25,13 +25,16 @@ def travel_time_filter(data):
 def combined_filter(data):
     return travel_time_filter(folktables.adult_filter(data))
 
-def get_data(year,features,outcome):
+def get_data(year,features,outcome, randperm=True):
     # Predict income and regress to time to work
     data_source = folktables.ACSDataSource(survey_year=year, horizon='1-Year', survey='person')
     acs_data = data_source.get_data(states=["CA"], download=True)
     income_features = acs_data[features].fillna(-1)
     income = acs_data[outcome].fillna(-1)
     employed = np.isin(acs_data['COW'], np.array([1,2,3,4,5,6,7]))
+    if randperm:
+        shuffler = np.random.permutation(income.shape[0])
+        income_features, income, employed = income_features.iloc[shuffler], income.iloc[shuffler], employed[shuffler]
     return income_features, income, employed
 
 def train_eval_regressor(features, outcome, add_bias=True):
@@ -45,8 +48,7 @@ def train_eval_regressor(features, outcome, add_bias=True):
     return tree
 
 def ols(features, outcome):
-    ols_model = LinearRegression().fit(features,outcome)
-    ols_coeffs = ols_model.coef_
+    ols_coeffs = np.linalg.pinv(features).dot(outcome)
     return ols_coeffs
 
 def plot_data(age,income,sex):
@@ -79,9 +81,13 @@ if __name__ == "__main__":
     predicted_income_2018 = income_tree.predict(xgb.DMatrix(income_features_2018)) 
     plot_data(age_2018, income_2018, sex_2018)
 
+    # Collect OLS features and do MAI
     ols_features_2018 = np.stack([age_2018, sex_2018], axis=1)
     ols_coeff_true = ols(ols_features_2018, income_2018)
-    ols_coeff_imputed = ols(ols_features_2018, predicted_income_2018)
-    ols_coeff_difference = ols(ols_features_2018, predicted_income_2018-income_2018)
+    N = ols_features_2018.shape[0]
+    n = 1000
 
-    print(f"True OLS coefficients: {ols_coeff_true}, Predicted OLS coefficients: {ols_coeff_imputed}, Difference OLS: {ols_coeff_difference}, Predicted - Diff: {ols_coeff_imputed - ols_coeff_difference}")
+    X_labeled, X_unlabeled, Y_labeled, Y_unlabeled, Yhat_labeled, Yhat_unlabeled = train_test_split(ols_features_2018, income_2018, predicted_income_2018, train_size=n)
+    naive_estimate = ols(np.concatenate([X_labeled, X_unlabeled],axis=0), np.concatenate([Y_labeled, Yhat_unlabeled], axis=0))
+
+    print(f"True OLS coefficients: {ols_coeff_true}, Predicted OLS coefficients: {naive_estimate}")
