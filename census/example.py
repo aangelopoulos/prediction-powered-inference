@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import folktables
 import pdb
@@ -34,14 +35,14 @@ def get_data(year,features,outcome):
     return income_features, income, employed
 
 def train_eval_regressor(features, outcome, add_bias=True):
-    X_train, X_test, y_train, y_test = train_test_split(features, outcome, test_size=1/3) 
+    X_train, X_test, y_train, y_test = train_test_split(features, outcome, test_size=0.1) 
     dtrain = xgb.DMatrix(X_train, label=y_train)
     dtest = xgb.DMatrix(X_test, label=y_test)
-    param = {'max_depth': 6, 'eta': 0.3, 'objective': 'reg:squarederror', 'eval_metric': ['rmse','mae']}
+    param = {'max_depth': 10, 'eta': 0.2, 'objective': 'reg:pseudohubererror', 'eval_metric': ['rmse','mae']}
     evallist = [(dtest, 'eval'), (dtrain, 'train')]
-    num_round = 100
+    num_round = 1000
     tree = xgb.train(param, dtrain, num_round, evallist)
-    return tree, X_test, y_test
+    return tree
 
 def ols(features, outcome):
     ols_model = LinearRegression().fit(features,outcome)
@@ -60,14 +61,27 @@ def plot_data(age,income,sex):
     plt.savefig("./plots/raw_data.pdf")
 
 if __name__ == "__main__":
-    os.makedirs('./plots')
+    os.makedirs('./plots', exist_ok=True)
+    # Train tree on 2017 data
     income_features_2017, income_2017, employed_2017 = get_data(year=2017, features=['AGEP','SCHL','MAR','RELP','DIS','ESP','CIT','MIG','MIL','ANC','NATIVITY','DEAR','DEYE','DREM','SEX','RAC1P'], outcome='PINCP')
     age_2017 = income_features_2017['AGEP'].to_numpy()[employed_2017]
     income_2017 = income_2017.to_numpy()[employed_2017]
     sex_2017 = income_features_2017['SEX'].to_numpy()[employed_2017]
-    plot_data(age_2017, income_2017, sex_2017)
-    ols_features = np.stack([age_2017, sex_2017], axis=1)
-    ols_coeff_true = ols(ols_features, income_2017)
+    income_features_2017 = income_features_2017.to_numpy()[employed_2017,:]
+    income_tree = train_eval_regressor(income_features_2017, income_2017)
 
-    #income_tree, X_labeled, y_labeled = train_eval_regressor(income_features_2017, income_2017)
-    print(ols_coeff_true)
+    # Evaluate tree and plot data in 2018
+    income_features_2018, income_2018, employed_2018 = get_data(year=2018, features=['AGEP','SCHL','MAR','RELP','DIS','ESP','CIT','MIG','MIL','ANC','NATIVITY','DEAR','DEYE','DREM','SEX','RAC1P'], outcome='PINCP')
+    age_2018 = income_features_2018['AGEP'].to_numpy()[employed_2018]
+    income_2018 = income_2018.to_numpy()[employed_2018]
+    sex_2018 = income_features_2018['SEX'].to_numpy()[employed_2018]
+    income_features_2018 = income_features_2018.to_numpy()[employed_2018,:]
+    predicted_income_2018 = income_tree.predict(xgb.DMatrix(income_features_2018)) 
+    plot_data(age_2018, income_2018, sex_2018)
+
+    ols_features_2018 = np.stack([age_2018, sex_2018], axis=1)
+    ols_coeff_true = ols(ols_features_2018, income_2018)
+    ols_coeff_imputed = ols(ols_features_2018, predicted_income_2018)
+    ols_coeff_difference = ols(ols_features_2018, predicted_income_2018-income_2018)
+
+    print(f"True OLS coefficients: {ols_coeff_true}, Predicted OLS coefficients: {ols_coeff_imputed}, Difference OLS: {ols_coeff_difference}, Predicted - Diff: {ols_coeff_imputed - ols_coeff_difference}")
