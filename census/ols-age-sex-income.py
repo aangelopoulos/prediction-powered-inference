@@ -7,6 +7,7 @@ import seaborn as sns
 import pandas as pd
 
 from scipy.stats import norm
+from scipy.optimize import brentq
 from sklearn.linear_model import LinearRegression 
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import make_pipeline
@@ -78,11 +79,44 @@ def get_tree(year=2017):
         income_tree.save_model(f"./.cache/model{year}.json")
     return income_tree
 
+def trial(ols_features_2018, income_2018, predicted_income_2018, ols_coeff_true, N, n, delta, delta1_opt):
+    X_labeled, X_unlabeled, Y_labeled, Y_unlabeled, Yhat_labeled, Yhat_unlabeled = train_test_split(ols_features_2018, income_2018, predicted_income_2018, train_size=n)
+    X = np.concatenate([X_labeled, X_unlabeled],axis=0)
+
+    naive_estimate = ols(X, np.concatenate([Y_labeled, Yhat_unlabeled], axis=0))
+
+    myopic_estimate = ols(X_labeled, Y_labeled)
+
+    myopic_sigmahat = np.std(np.linalg.pinv(X)[:,:n]*Y_labeled[None,:], axis=1)
+
+    myopic_fluctuations = myopic_sigmahat * ( norm.ppf(1-delta1_opt/2) * np.sqrt(n*(N-n)/N) + norm.ppf(1-(delta-delta1_opt)/2) * np.sqrt( ((N-n)**3) / (N*n) ))
+
+    rectifier = ((N-n)/n)*(np.linalg.pinv(X)[:,:n].dot(Yhat_labeled-Y_labeled))
+
+    modelassisted_estimate = naive_estimate - rectifier 
+
+    sigmahat = np.std(np.linalg.pinv(X)[:,:n]*(Yhat_labeled-Y_labeled)[None,:], axis=1) 
+    
+    fluctuations = sigmahat * ( norm.ppf(1-delta1_opt/2) * np.sqrt(n*(N-n)/N) + norm.ppf(1-(delta-delta1_opt)/2) * np.sqrt( ((N-n)**3) / (N*n) ))
+
+    naive_error = np.abs(naive_estimate - ols_coeff_true)
+    myopic_error = np.abs(myopic_estimate - ols_coeff_true)
+    modelassisted_error = np.abs(modelassisted_estimate - ols_coeff_true)
+
+    myopic_width = myopic_fluctuations
+    modelassisted_width = fluctuations
+
+    myopic_covered = myopic_error <= myopic_width 
+    modelassisted_covered = modelassisted_error <= modelassisted_width
+
+    return naive_error, myopic_error, modelassisted_error, myopic_width, modelassisted_width, myopic_covered, modelassisted_covered
 
 if __name__ == "__main__":
     os.makedirs('./plots', exist_ok=True)
     # Train tree on 2017 data
+    np.random.seed(0) # Fix seed for tree
     income_tree = get_tree()
+    np.random.seed(0) # Fix seed for evaluation
 
     # Evaluate tree and plot data in 2018
     income_features_2018, income_2018, employed_2018 = get_data(year=2018, features=['AGEP','SCHL','MAR','RELP','DIS','ESP','CIT','MIG','MIL','ANC','NATIVITY','DEAR','DEYE','DREM','SEX','RAC1P'], outcome='PINCP')
@@ -97,26 +131,10 @@ if __name__ == "__main__":
     ols_features_2018 = np.stack([age_2018, sex_2018], axis=1)
     ols_coeff_true = ols(ols_features_2018, income_2018)
     N = ols_features_2018.shape[0]
-    n = 1000 
+    n = 500 
+    num_trials = 100
     delta = 0.05
+    delta1_opt = brentq(lambda x: (norm.ppf(1-x/2)/norm.ppf(1-(delta-x)/2)) - (N-n)/n, 0, delta)
 
-    X_labeled, X_unlabeled, Y_labeled, Y_unlabeled, Yhat_labeled, Yhat_unlabeled = train_test_split(ols_features_2018, income_2018, predicted_income_2018, train_size=n)
-    X = np.concatenate([X_labeled, X_unlabeled],axis=0)
-
-    naive_estimate = ols(X, np.concatenate([Y_labeled, Yhat_unlabeled], axis=0))
-
-    myopic_estimate = ols(X_labeled, Y_labeled)
-
-    myopic_sigmahat = np.std(np.linalg.pinv(X)[:,:n]*Y_labeled[None,:], axis=1)
-
-    myopic_fluctuations = myopic_sigmahat * norm.ppf(1-delta/4) * ( np.sqrt(n*(N-n)/N) + np.sqrt( ((N-n)**3) / (N*n) ))
-
-    rectifier = ((N-n)/n)*(np.linalg.pinv(X)[:,:n].dot(Yhat_labeled-Y_labeled))
-
-    mae = naive_estimate - rectifier 
-
-    sigmahat = np.std(np.linalg.pinv(X)[:,:n]*(Yhat_labeled-Y_labeled)[None,:], axis=1) 
-    
-    fluctuations = sigmahat * norm.ppf(1-delta/4) * ( np.sqrt(n*(N-n)/N) + np.sqrt( ((N-n)**3) / (N*n) ))
-
-    print(f"N: {N}, n: {n}, True: {ols_coeff_true}, Naive: {naive_estimate}, Myopic: {myopic_estimate} +- {myopic_fluctuations}, Model-Assisted: {mae} +- {fluctuations}")
+    for i in range(num_trials):
+        naive_error, myopic_error, modelassisted_error, myopic_width, modelassisted_width, myopic_covered, modelassisted_covered = trial(ols_features_2018, income_2018, predicted_income_2018, ols_coeff_true, N, n, delta, delta1_opt)
