@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
 
+from scipy.stats import norm
 from sklearn.linear_model import LinearRegression 
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import make_pipeline
@@ -62,15 +63,26 @@ def plot_data(age,income,sex):
     plt.tight_layout()
     plt.savefig("./plots/raw_data.pdf")
 
+def get_tree(year=2017):
+    try:
+        income_tree = xgb.Booster()
+        income_tree.load_model(f"./.cache/model{year}.json")
+    except:
+        income_features_2017, income_2017, employed_2017 = get_data(year=year, features=['AGEP','SCHL','MAR','RELP','DIS','ESP','CIT','MIG','MIL','ANC','NATIVITY','DEAR','DEYE','DREM','SEX','RAC1P'], outcome='PINCP')
+        age_2017 = income_features_2017['AGEP'].to_numpy()[employed_2017]
+        income_2017 = income_2017.to_numpy()[employed_2017]
+        sex_2017 = income_features_2017['SEX'].to_numpy()[employed_2017]
+        income_features_2017 = income_features_2017.to_numpy()[employed_2017,:]
+        income_tree = train_eval_regressor(income_features_2017, income_2017)
+        os.makedirs("./.cache/", exist_ok=True)
+        income_tree.save_model(f"./.cache/model{year}.json")
+    return income_tree
+
+
 if __name__ == "__main__":
     os.makedirs('./plots', exist_ok=True)
     # Train tree on 2017 data
-    income_features_2017, income_2017, employed_2017 = get_data(year=2017, features=['AGEP','SCHL','MAR','RELP','DIS','ESP','CIT','MIG','MIL','ANC','NATIVITY','DEAR','DEYE','DREM','SEX','RAC1P'], outcome='PINCP')
-    age_2017 = income_features_2017['AGEP'].to_numpy()[employed_2017]
-    income_2017 = income_2017.to_numpy()[employed_2017]
-    sex_2017 = income_features_2017['SEX'].to_numpy()[employed_2017]
-    income_features_2017 = income_features_2017.to_numpy()[employed_2017,:]
-    income_tree = train_eval_regressor(income_features_2017, income_2017)
+    income_tree = get_tree()
 
     # Evaluate tree and plot data in 2018
     income_features_2018, income_2018, employed_2018 = get_data(year=2018, features=['AGEP','SCHL','MAR','RELP','DIS','ESP','CIT','MIG','MIL','ANC','NATIVITY','DEAR','DEYE','DREM','SEX','RAC1P'], outcome='PINCP')
@@ -85,22 +97,26 @@ if __name__ == "__main__":
     ols_features_2018 = np.stack([age_2018, sex_2018], axis=1)
     ols_coeff_true = ols(ols_features_2018, income_2018)
     N = ols_features_2018.shape[0]
-    n = 500
+    n = 1000 
+    delta = 0.05
 
     X_labeled, X_unlabeled, Y_labeled, Y_unlabeled, Yhat_labeled, Yhat_unlabeled = train_test_split(ols_features_2018, income_2018, predicted_income_2018, train_size=n)
     X = np.concatenate([X_labeled, X_unlabeled],axis=0)
 
     naive_estimate = ols(X, np.concatenate([Y_labeled, Yhat_unlabeled], axis=0))
 
-    labeled_estimate = ols(X_labeled, Y_labeled)
+    myopic_estimate = ols(X_labeled, Y_labeled)
+
+    myopic_sigmahat = np.std(np.linalg.pinv(X)[:,:n]*Y_labeled[None,:], axis=1)
+
+    myopic_fluctuations = myopic_sigmahat * norm.ppf(1-delta/4) * ( np.sqrt(n*(N-n)/N) + np.sqrt( ((N-n)**3) / (N*n) ))
 
     rectifier = ((N-n)/n)*(np.linalg.pinv(X)[:,:n].dot(Yhat_labeled-Y_labeled))
 
     mae = naive_estimate - rectifier 
 
-    pdb.set_trace()
-    sigma = np.std(np.linalg.pinv(X)[:,:n]*(Yhat_labeled-Y_labeled)[None,:], axis=1) 
+    sigmahat = np.std(np.linalg.pinv(X)[:,:n]*(Yhat_labeled-Y_labeled)[None,:], axis=1) 
+    
+    fluctuations = sigmahat * norm.ppf(1-delta/4) * ( np.sqrt(n*(N-n)/N) + np.sqrt( ((N-n)**3) / (N*n) ))
 
-    fluctuations = sigma * ( np.sqrt(n/(N-n)) + np.sqrt(1/(N-n)) )
-
-    print(f"N: {N}, n: {n}, True OLS coefficients: {ols_coeff_true}, Predicted OLS coefficients: {naive_estimate}, Labeled data only: {labeled_estimate}, Model-Assisted: {mae} +- {fluctuations}")
+    print(f"N: {N}, n: {n}, True: {ols_coeff_true}, Naive: {naive_estimate}, Myopic: {myopic_estimate} +- {myopic_fluctuations}, Model-Assisted: {mae} +- {fluctuations}")
