@@ -85,9 +85,22 @@ if __name__ == "__main__":
     ols_features_2018 = np.stack([age_2018, sex_2018], axis=1)
     ols_coeff_true = ols(ols_features_2018, income_2018)
     N = ols_features_2018.shape[0]
-    n = 1000
+    n = 500
 
     X_labeled, X_unlabeled, Y_labeled, Y_unlabeled, Yhat_labeled, Yhat_unlabeled = train_test_split(ols_features_2018, income_2018, predicted_income_2018, train_size=n)
-    naive_estimate = ols(np.concatenate([X_labeled, X_unlabeled],axis=0), np.concatenate([Y_labeled, Yhat_unlabeled], axis=0))
+    X = np.concatenate([X_labeled, X_unlabeled],axis=0)
 
-    print(f"True OLS coefficients: {ols_coeff_true}, Predicted OLS coefficients: {naive_estimate}")
+    naive_estimate = ols(X, np.concatenate([Y_labeled, Yhat_unlabeled], axis=0))
+
+    labeled_estimate = ols(X_labeled, Y_labeled)
+
+    rectifier = ((N-n)/n)*(np.linalg.pinv(X)[:,:n].dot(Yhat_labeled-Y_labeled))
+
+    mae = naive_estimate - rectifier 
+
+    pdb.set_trace()
+    sigma = np.std(np.linalg.pinv(X)[:,:n]*(Yhat_labeled-Y_labeled)[None,:], axis=1) 
+
+    fluctuations = sigma * ( np.sqrt(n/(N-n)) + np.sqrt(1/(N-n)) )
+
+    print(f"N: {N}, n: {n}, True OLS coefficients: {ols_coeff_true}, Predicted OLS coefficients: {naive_estimate}, Labeled data only: {labeled_estimate}, Model-Assisted: {mae} +- {fluctuations}")
