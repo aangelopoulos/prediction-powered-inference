@@ -107,34 +107,68 @@ def trial(ols_features_2018, income_2018, predicted_income_2018, ols_coeff_true,
     modelassisted_width = fluctuations
 
     myopic_covered = myopic_error <= myopic_width 
-    modelassisted_covered = modelassisted_error <= modelassisted_width
+    modelassisted_covered = modelassisted_error <= modelassisted_width 
 
     return naive_error, myopic_error, modelassisted_error, myopic_width, modelassisted_width, myopic_covered, modelassisted_covered
 
+def make_histograms(df):
+    plt.figure()
+    sns.set_theme(style="white", palette="pastel")
+    sns.displot(df[df["coefficient"]=="age"][df["estimator"] != "naive"], x="error", hue="estimator", kind="kde", fill=True)
+    #plt.axvline(x=df[df["coefficient"]=="age"][df["estimator"] == "naive"]["error"].mean(), label="naive")
+    plt.ylabel("")
+    plt.xlabel("error ($/yr)")
+    plt.gca().set_yticklabels([])
+    plt.savefig('./plots/ageerr.pdf')
+
+    plt.figure()
+    sns.set_theme(style="white", palette="pastel")
+    sns.displot(df[df["coefficient"]=="sex"][df["estimator"] != "naive"], x="error", hue="estimator", kind="kde", fill=True)
+    #plt.axvline(x=df[df["coefficient"]=="sex"][df["estimator"] == "naive"]["error"].mean(), label="naive")
+    plt.ylabel("")
+    plt.xlabel("error ($)")
+    plt.gca().set_yticklabels([])
+    plt.savefig('./plots/sexerr.pdf')
+
 if __name__ == "__main__":
     os.makedirs('./plots', exist_ok=True)
-    # Train tree on 2017 data
-    np.random.seed(0) # Fix seed for tree
-    income_tree = get_tree()
-    np.random.seed(0) # Fix seed for evaluation
+    try:
+        df = pd.read_csv('./.cache/results.csv')
+    except:
+        # Train tree on 2017 data
+        np.random.seed(0) # Fix seed for tree
+        income_tree = get_tree()
+        np.random.seed(0) # Fix seed for evaluation
 
-    # Evaluate tree and plot data in 2018
-    income_features_2018, income_2018, employed_2018 = get_data(year=2018, features=['AGEP','SCHL','MAR','RELP','DIS','ESP','CIT','MIG','MIL','ANC','NATIVITY','DEAR','DEYE','DREM','SEX','RAC1P'], outcome='PINCP')
-    age_2018 = income_features_2018['AGEP'].to_numpy()[employed_2018]
-    income_2018 = income_2018.to_numpy()[employed_2018]
-    sex_2018 = income_features_2018['SEX'].to_numpy()[employed_2018]
-    income_features_2018 = income_features_2018.to_numpy()[employed_2018,:]
-    predicted_income_2018 = income_tree.predict(xgb.DMatrix(income_features_2018)) 
-    plot_data(age_2018, income_2018, sex_2018)
+        # Evaluate tree and plot data in 2018
+        income_features_2018, income_2018, employed_2018 = get_data(year=2018, features=['AGEP','SCHL','MAR','RELP','DIS','ESP','CIT','MIG','MIL','ANC','NATIVITY','DEAR','DEYE','DREM','SEX','RAC1P'], outcome='PINCP')
+        age_2018 = income_features_2018['AGEP'].to_numpy()[employed_2018]
+        income_2018 = income_2018.to_numpy()[employed_2018]
+        sex_2018 = income_features_2018['SEX'].to_numpy()[employed_2018]
+        income_features_2018 = income_features_2018.to_numpy()[employed_2018,:]
+        predicted_income_2018 = income_tree.predict(xgb.DMatrix(income_features_2018)) 
+        plot_data(age_2018, income_2018, sex_2018)
 
-    # Collect OLS features and do MAI
-    ols_features_2018 = np.stack([age_2018, sex_2018], axis=1)
-    ols_coeff_true = ols(ols_features_2018, income_2018)
-    N = ols_features_2018.shape[0]
-    n = 500 
-    num_trials = 100
-    delta = 0.05
-    delta1_opt = brentq(lambda x: (norm.ppf(1-x/2)/norm.ppf(1-(delta-x)/2)) - (N-n)/n, 0, delta)
+        # Collect OLS features and do MAI
+        ols_features_2018 = np.stack([age_2018, sex_2018], axis=1)
+        ols_coeff_true = ols(ols_features_2018, income_2018)
+        N = ols_features_2018.shape[0]
+        n = 500 
+        num_trials = 20
+        delta = 0.05
+        delta1_opt = brentq(lambda x: (norm.ppf(1-x/2)/norm.ppf(1-(delta-x)/2)) - (N-n)/n, 0, delta)
 
-    for i in range(num_trials):
-        naive_error, myopic_error, modelassisted_error, myopic_width, modelassisted_width, myopic_covered, modelassisted_covered = trial(ols_features_2018, income_2018, predicted_income_2018, ols_coeff_true, N, n, delta, delta1_opt)
+        # Store results
+        columns = ["error","width","covered","estimator","coefficient"]
+        df = pd.DataFrame(np.zeros((num_trials*3*2,len(columns))), columns=columns)
+
+        for i in range(num_trials):
+            naive_error, myopic_error, modelassisted_error, myopic_width, modelassisted_width, myopic_covered, modelassisted_covered = trial(ols_features_2018, income_2018, predicted_income_2018, ols_coeff_true, N, n, delta, delta1_opt)
+            df.loc[i] = naive_error[0], -1, -1, "naive", "age"
+            df.loc[i+num_trials] = naive_error[1], -1, -1, "naive", "sex"
+            df.loc[i+2*num_trials] = myopic_error[0], myopic_width[0], myopic_covered[0], "myopic", "age"
+            df.loc[i+3*num_trials] = myopic_error[1], myopic_width[1], myopic_covered[1], "myopic", "sex"
+            df.loc[i+4*num_trials] = modelassisted_error[0], modelassisted_width[0], modelassisted_covered[0], "model assisted", "age"
+            df.loc[i+5*num_trials] = modelassisted_error[1], modelassisted_width[1], modelassisted_covered[1], "model assisted", "sex"
+        df.to_csv('./.cache/results.csv')
+    make_histograms(df)
