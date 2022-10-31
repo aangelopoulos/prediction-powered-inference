@@ -13,6 +13,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 import xgboost as xgb
+from tqdm import tqdm
 
 def travel_time_filter(data):
     """
@@ -112,28 +113,63 @@ def trial(ols_features_2018, income_2018, predicted_income_2018, ols_coeff_true,
     return naive_error, myopic_error, modelassisted_error, myopic_width, modelassisted_width, myopic_covered, modelassisted_covered
 
 def make_histograms(df):
-    plt.figure()
+    # Error figure
+    fig, axs = plt.subplots(ncols=2, figsize=(7.5, 2.5))
     sns.set_theme(style="white", palette="pastel")
-    sns.displot(df[df["coefficient"]=="age"][df["estimator"] != "naive"], x="error", hue="estimator", kind="kde", fill=True)
-    #plt.axvline(x=df[df["coefficient"]=="age"][df["estimator"] == "naive"]["error"].mean(), label="naive")
-    plt.ylabel("")
-    plt.xlabel("error ($/yr)")
-    plt.gca().set_yticklabels([])
-    plt.savefig('./plots/ageerr.pdf')
+    kde0 = sns.kdeplot(df[df["coefficient"]=="age"][df["estimator"] != "naive"], ax=axs[0], x="error", hue="estimator", fill=True, clip=(0,None))
+    axs[0].axvline(x=df[df["coefficient"]=="age"][df["estimator"] == "naive"]["error"].mean(), label="naive", color="#7EAC95")
+    axs[0].set_ylabel("")
+    axs[0].set_xlabel("error (age coefficient, $/yr of age)")
+    axs[0].set_yticklabels([])
+    axs[0].set_yticks([])
+    kde0.get_legend().remove()
+    sns.despine(ax=axs[0],top=True,right=True,left=True)
 
-    plt.figure()
+    sns.kdeplot(df[df["coefficient"]=="sex"][df["estimator"] != "naive"], ax=axs[1], x="error", hue="estimator", fill=True, clip=(0,None))
+    l = axs[1].axvline(x=df[df["coefficient"]=="sex"][df["estimator"] == "naive"]["error"].mean(), label="naive", color="#7EAC95")
+    axs[1].set_ylabel("")
+    axs[1].set_xlabel("error (sex coefficient, $)")
+    axs[1].set_yticklabels([])
+    axs[1].set_yticks([])
+    axs[1].legend(["model-assisted", "myopic", "naive"])
+    sns.despine(ax=axs[1],top=True,right=True,left=True)
+    fig.suptitle("error distribution of point estimates")
+    plt.tight_layout()
+    plt.savefig('./plots/err.pdf')
+
+    # Width figure
+    fig, axs = plt.subplots(ncols=2, figsize=(7.5, 2.5))
     sns.set_theme(style="white", palette="pastel")
-    sns.displot(df[df["coefficient"]=="sex"][df["estimator"] != "naive"], x="error", hue="estimator", kind="kde", fill=True)
-    #plt.axvline(x=df[df["coefficient"]=="sex"][df["estimator"] == "naive"]["error"].mean(), label="naive")
-    plt.ylabel("")
-    plt.xlabel("error ($)")
-    plt.gca().set_yticklabels([])
-    plt.savefig('./plots/sexerr.pdf')
+    kde0 = sns.kdeplot(df[df["coefficient"]=="age"][df["estimator"] != "naive"], ax=axs[0], x="width", hue="estimator", fill=True, clip=(0,None))
+    axs[0].set_ylabel("")
+    axs[0].set_xlabel("error (age coefficient, $/yr of age)")
+    axs[0].set_yticks([])
+    axs[0].set_yticklabels([])
+    kde0.get_legend().remove()
+    sns.despine(ax=axs[0],top=True,right=True,left=True)
+
+    sns.kdeplot(df[df["coefficient"]=="sex"][df["estimator"] != "naive"], ax=axs[1], x="width", hue="estimator", fill=True, clip=(0,None))
+    axs[1].set_ylabel("")
+    axs[1].set_xlabel("error (sex coefficient, $)")
+    axs[1].set_yticks([])
+    axs[1].set_yticklabels([])
+    axs[1].legend(["model-assisted", "myopic"])
+    sns.despine(ax=axs[1],top=True,right=True,left=True)
+    fig.suptitle("confidence interval widths")
+    plt.tight_layout()
+    plt.savefig('./plots/width.pdf')
+
+    cvg_myopic_age = (df[(df["estimator"]=="myopic") & (df["coefficient"]=="age")]["covered"]).mean()    
+    cvg_myopic_sex = (df[(df["estimator"]=="myopic") & (df["coefficient"]=="sex")]["covered"]).mean()    
+    cvg_modelassisted_age = (df[(df["estimator"]=="model assisted") & (df["coefficient"]=="age")]["covered"]).mean()    
+    cvg_modelassisted_sex = (df[(df["estimator"]=="model assisted") & (df["coefficient"]=="sex")]["covered"]).mean()    
+
+    print(f"Myopic coverage ({cvg_myopic_age},{cvg_myopic_sex}), model-assisted ({cvg_modelassisted_age},{cvg_modelassisted_sex})")
 
 if __name__ == "__main__":
     os.makedirs('./plots', exist_ok=True)
     try:
-        df = pd.read_csv('./.cache/results.csv')
+        df = pd.read_pickle('./.cache/results.pkl')
     except:
         # Train tree on 2017 data
         np.random.seed(0) # Fix seed for tree
@@ -154,7 +190,7 @@ if __name__ == "__main__":
         ols_coeff_true = ols(ols_features_2018, income_2018)
         N = ols_features_2018.shape[0]
         n = 500 
-        num_trials = 20
+        num_trials = 1000
         delta = 0.05
         delta1_opt = brentq(lambda x: (norm.ppf(1-x/2)/norm.ppf(1-(delta-x)/2)) - (N-n)/n, 0, delta)
 
@@ -162,13 +198,13 @@ if __name__ == "__main__":
         columns = ["error","width","covered","estimator","coefficient"]
         df = pd.DataFrame(np.zeros((num_trials*3*2,len(columns))), columns=columns)
 
-        for i in range(num_trials):
+        for i in tqdm(range(num_trials)):
             naive_error, myopic_error, modelassisted_error, myopic_width, modelassisted_width, myopic_covered, modelassisted_covered = trial(ols_features_2018, income_2018, predicted_income_2018, ols_coeff_true, N, n, delta, delta1_opt)
-            df.loc[i] = naive_error[0], -1, -1, "naive", "age"
-            df.loc[i+num_trials] = naive_error[1], -1, -1, "naive", "sex"
-            df.loc[i+2*num_trials] = myopic_error[0], myopic_width[0], myopic_covered[0], "myopic", "age"
-            df.loc[i+3*num_trials] = myopic_error[1], myopic_width[1], myopic_covered[1], "myopic", "sex"
-            df.loc[i+4*num_trials] = modelassisted_error[0], modelassisted_width[0], modelassisted_covered[0], "model assisted", "age"
-            df.loc[i+5*num_trials] = modelassisted_error[1], modelassisted_width[1], modelassisted_covered[1], "model assisted", "sex"
-        df.to_csv('./.cache/results.csv')
+            df.loc[i] = naive_error[0], -1, 0, "naive", "age"
+            df.loc[i+num_trials] = naive_error[1], -1, 0, "naive", "sex"
+            df.loc[i+2*num_trials] = myopic_error[0], myopic_width[0], int(myopic_covered[0]), "myopic", "age"
+            df.loc[i+3*num_trials] = myopic_error[1], myopic_width[1], int(myopic_covered[1]), "myopic", "sex"
+            df.loc[i+4*num_trials] = modelassisted_error[0], modelassisted_width[0], int(modelassisted_covered[0]), "model assisted", "age"
+            df.loc[i+5*num_trials] = modelassisted_error[1], modelassisted_width[1], int(modelassisted_covered[1]), "model assisted", "sex"
+        df.to_pickle('./.cache/results.pkl')
     make_histograms(df)
