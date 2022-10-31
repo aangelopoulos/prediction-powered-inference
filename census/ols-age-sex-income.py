@@ -133,7 +133,7 @@ def make_histograms(df):
     axs[1].set_yticks([])
     axs[1].legend(["model-assisted", "myopic", "naive"])
     sns.despine(ax=axs[1],top=True,right=True,left=True)
-    fig.suptitle("error distribution of point estimates")
+    fig.suptitle("") # This is here for spacing
     plt.tight_layout()
     plt.savefig('./plots/err.pdf')
 
@@ -142,7 +142,7 @@ def make_histograms(df):
     sns.set_theme(style="white", palette="pastel")
     kde0 = sns.kdeplot(df[df["coefficient"]=="age"][df["estimator"] != "naive"], ax=axs[0], x="width", hue="estimator", fill=True, clip=(0,None))
     axs[0].set_ylabel("")
-    axs[0].set_xlabel("error (age coefficient, $/yr of age)")
+    axs[0].set_xlabel("width (age coefficient, $/yr of age)")
     axs[0].set_yticks([])
     axs[0].set_yticklabels([])
     kde0.get_legend().remove()
@@ -150,13 +150,13 @@ def make_histograms(df):
 
     sns.kdeplot(df[df["coefficient"]=="sex"][df["estimator"] != "naive"], ax=axs[1], x="width", hue="estimator", fill=True, clip=(0,None))
     axs[1].set_ylabel("")
-    axs[1].set_xlabel("error (sex coefficient, $)")
+    axs[1].set_xlabel("width (sex coefficient, $)")
     axs[1].set_yticks([])
     axs[1].set_yticklabels([])
-    axs[1].legend(["model-assisted", "myopic"])
     sns.despine(ax=axs[1],top=True,right=True,left=True)
-    fig.suptitle("confidence interval widths")
+    fig.suptitle("") # This is here for spacing
     plt.tight_layout()
+    axs[1].legend(["model-assisted", "myopic"], bbox_to_anchor = (1.1,1.25) )
     plt.savefig('./plots/width.pdf')
 
     cvg_myopic_age = (df[(df["estimator"]=="myopic") & (df["coefficient"]=="age")]["covered"]).mean()    
