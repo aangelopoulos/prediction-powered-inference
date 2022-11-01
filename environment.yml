@@ -22,3 +22,7 @@ dependencies:
     - cudatoolkit=11.6
     - ipykernel
     - jupyter
+    - xgboost
+    - seaborn
+    - pip:
+      - folktables
