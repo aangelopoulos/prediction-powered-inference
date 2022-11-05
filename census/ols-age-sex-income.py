@@ -158,7 +158,7 @@ def make_histograms(df):
     sns.despine(ax=axs[1],top=True,right=True,left=True)
     fig.suptitle("") # This is here for spacing
     plt.tight_layout()
-    axs[1].legend(["model-assisted", "classical"], bbox_to_anchor = (1.1,1.25) )
+    axs[1].legend(["model-assisted", "classical"], bbox_to_anchor = (1.,1.2) )
     plt.savefig('./plots/width.pdf')
 
     # Standard deviation figure
@@ -180,7 +180,7 @@ def make_histograms(df):
     sns.despine(ax=axs[1],top=True,right=True,left=True)
     fig.suptitle("") # This is here for spacing
     plt.tight_layout()
-    axs[1].legend(["model-assisted", "classical"], bbox_to_anchor = (1.1,1.25) )
+    axs[1].legend(["model-assisted", "classical"], bbox_to_anchor = (1.,1.2) )
     plt.savefig('./plots/stds.pdf')
 
     cvg_classical_age = (df[(df["estimator"]=="classical") & (df["coefficient"]=="age")]["covered"]).mean()    
