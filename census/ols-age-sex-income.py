@@ -115,9 +115,10 @@ def trial(ols_features_2018, income_2018, predicted_income_2018, ols_coeff_true,
 
 def make_histograms(df):
     # Error figure
+    df["error"] = df["error"].abs()
     fig, axs = plt.subplots(ncols=2, figsize=(7.5, 2.5))
     sns.set_theme(style="white", palette="pastel")
-    kde0 = sns.kdeplot(df[df["coefficient"]=="age"][df["estimator"] != "imputed"], ax=axs[0], x="error", hue="estimator", fill=True, clip=(None,None))
+    kde0 = sns.kdeplot(df[df["coefficient"]=="age"][df["estimator"] != "imputed"], ax=axs[0], x="error", hue="estimator", fill=True, clip=(0,None))
     axs[0].axvline(x=df[df["coefficient"]=="age"][df["estimator"] == "imputed"]["error"].mean(), label="imputed", color="#7EAC95")
     axs[0].set_ylabel("")
     axs[0].set_xlabel("error (age coefficient, $/yr of age)")
@@ -126,7 +127,7 @@ def make_histograms(df):
     kde0.get_legend().remove()
     sns.despine(ax=axs[0],top=True,right=True,left=True)
 
-    sns.kdeplot(df[df["coefficient"]=="sex"][df["estimator"] != "imputed"], ax=axs[1], x="error", hue="estimator", fill=True, clip=(None,None))
+    sns.kdeplot(df[df["coefficient"]=="sex"][df["estimator"] != "imputed"], ax=axs[1], x="error", hue="estimator", fill=True, clip=(0,None))
     l = axs[1].axvline(x=df[df["coefficient"]=="sex"][df["estimator"] == "imputed"]["error"].mean(), label="imputed", color="#7EAC95")
     axs[1].set_ylabel("")
     axs[1].set_xlabel("error (sex coefficient, $)")
@@ -141,7 +142,7 @@ def make_histograms(df):
     # Width figure
     fig, axs = plt.subplots(ncols=2, figsize=(7.5, 2.5))
     sns.set_theme(style="white", palette="pastel")
-    kde0 = sns.kdeplot(df[df["coefficient"]=="age"][df["estimator"] != "imputed"], ax=axs[0], x="width", hue="estimator", fill=True, clip=(None,None))
+    kde0 = sns.kdeplot(df[df["coefficient"]=="age"][df["estimator"] != "imputed"], ax=axs[0], x="width", hue="estimator", fill=True, clip=(0,None))
     axs[0].set_ylabel("")
     axs[0].set_xlabel("width (age coefficient, $/yr of age)")
     axs[0].set_yticks([])
@@ -149,7 +150,7 @@ def make_histograms(df):
     kde0.get_legend().remove()
     sns.despine(ax=axs[0],top=True,right=True,left=True)
 
-    sns.kdeplot(df[df["coefficient"]=="sex"][df["estimator"] != "imputed"], ax=axs[1], x="width", hue="estimator", fill=True, clip=(None,None))
+    sns.kdeplot(df[df["coefficient"]=="sex"][df["estimator"] != "imputed"], ax=axs[1], x="width", hue="estimator", fill=True, clip=(0,None))
     axs[1].set_ylabel("")
     axs[1].set_xlabel("width (sex coefficient, $)")
     axs[1].set_yticks([])
@@ -163,17 +164,17 @@ def make_histograms(df):
     # Standard deviation figure
     fig, axs = plt.subplots(ncols=2, figsize=(7.5, 2.5))
     sns.set_theme(style="white", palette="pastel")
-    kde0 = sns.kdeplot(df[df["coefficient"]=="age"][df["estimator"] != "imputed"], ax=axs[0], x=r'$\sigma$', hue="estimator", fill=True, clip=(None,None))
+    kde0 = sns.kdeplot(df[df["coefficient"]=="age"][df["estimator"] != "imputed"], ax=axs[0], x=r'$\sigma$', hue="estimator", fill=True, clip=(0,None))
     axs[0].set_ylabel("")
-    axs[0].set_xlabel("std of OLS summands (age coefficient, $/yr of age)")
+    axs[0].set_xlabel("std of OLS summands (age)")
     axs[0].set_yticks([])
     axs[0].set_yticklabels([])
     kde0.get_legend().remove()
     sns.despine(ax=axs[0],top=True,right=True,left=True)
 
-    sns.kdeplot(df[df["coefficient"]=="sex"][df["estimator"] != "imputed"], ax=axs[1], x=r'$\sigma$', hue="estimator", fill=True, clip=(None,None))
+    sns.kdeplot(df[df["coefficient"]=="sex"][df["estimator"] != "imputed"], ax=axs[1], x=r'$\sigma$', hue="estimator", fill=True, clip=(0,None))
     axs[1].set_ylabel("")
-    axs[1].set_xlabel("std of OLS summands (sex coefficient, $)")
+    axs[1].set_xlabel("std of OLS summands (sex)")
     axs[1].set_yticks([])
     axs[1].set_yticklabels([])
     sns.despine(ax=axs[1],top=True,right=True,left=True)
