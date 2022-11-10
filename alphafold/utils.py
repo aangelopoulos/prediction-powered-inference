@@ -108,7 +108,7 @@ def get_logical_ci(x_n, N):
 
 
 def get_betting_wor_ci(x_n, N, alpha, grid_spacing, use_intersection: bool = True,
-                       parallelize: bool = True, n_cores: int = None):
+                       parallelize: bool = False, n_cores: int = None):
     candidates = np.arange(0, 1 + grid_spacing, step=grid_spacing)
     threshold = 1 / alpha
     if parallelize:
@@ -146,7 +146,7 @@ def get_betting_wor_ci(x_n, N, alpha, grid_spacing, use_intersection: bool = Tru
 # odds ratio estimation based on finite sample mean estimation
 def get_odds_ratio_betting_ci(df, ptm_name, lab_idx, alpha, grid_spacing: float = 1e-3,
                               use_intersection: bool = True, verbose: bool = True,
-                              parallelize: bool = True, n_cores: int = None):
+                              parallelize: bool = False, n_cores: int = None):
 
     # Z: df[ptm_name]
     # Y: df['disordered']
