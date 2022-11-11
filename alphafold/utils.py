@@ -10,8 +10,8 @@ def get_confusion_matrix(df, pred_col_name, true_column_name):
     y1_df = df.loc[df[true_column_name] == 1]
     y0_df = df.loc[df[true_column_name] == 0]
     confmat_2x2 = np.array([
-        [len(y1_df.loc[y1_df[pred_col_name] == 1]), len(y1_df.loc[y1_df[pred_col_name] == 0])],
-        [len(y0_df.loc[y0_df[pred_col_name] == 1]), len(y0_df.loc[y0_df[pred_col_name] == 0])]
+        [len(y1_df.loc[y1_df[pred_col_name] >= 0.5]), len(y1_df.loc[y1_df[pred_col_name] < 0.5])],
+        [len(y0_df.loc[y0_df[pred_col_name] >= 0.5]), len(y0_df.loc[y0_df[pred_col_name] < 0.5])]
     ])
     confmat_2x2 = confmat_2x2 / np.sum(confmat_2x2, axis=1, keepdims=True)
     return confmat_2x2
