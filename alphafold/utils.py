@@ -2,10 +2,6 @@ import numpy as np
 import math
 import multiprocess
 
-PTM_NAMES = [
-    'p', 'p_reg', 'ub', 'ub_reg', 'sm', 'sm_reg', 'ac', 'ac_reg', 'm', 'm_reg', 'ga', 'gl', 'gl_reg',
-]
-
 def get_confusion_matrix(df, pred_col_name, true_column_name):
     y1_df = df.loc[df[true_column_name] == 1]
     y0_df = df.loc[df[true_column_name] == 0]
@@ -81,12 +77,12 @@ def get_odds_ratio_ci_from_mu_ci(mu1_ci, mu0_ci):
 
 def get_logical_ci(x_n, N):
     """
-    The 1-dimensional logical confidence sequence for sampling without
-    replacement. This is essentially the CS that would be
-    known regardless of the underlying martingale being used.
-    Specifically, if the cumulative sum at time t, S_t is equal to
-    5 and N is 10, then the true mean cannot be any less than 0.5, assuming
-    all observations are between 0 and 1.
+    The confidence interval that would be known for sampling w/o replacement,
+    regardless of the concentration strategy used.
+
+    For example, if the sum of our labeled data is 5 and N is 10, then the true mean
+    cannot be any less than 0.5, assuming all observations are between 0 and 1.
+    
     Parameters
     ----------
     x, array-like of reals between 0 and 1
