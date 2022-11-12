@@ -166,7 +166,7 @@ def make_histograms(df):
     sns.set_theme(style="white", palette="pastel")
     kde0 = sns.kdeplot(df[df["coefficient"]=="age"][df["estimator"] != "imputed"], ax=axs[0], x=r'$\sigma$', hue="estimator", fill=True, clip=(0,None))
     axs[0].set_ylabel("")
-    axs[0].set_xlabel("std of OLS summands (age)")
+    axs[0].set_xlabel("std of summands (age)")
     axs[0].set_yticks([])
     axs[0].set_yticklabels([])
     kde0.get_legend().remove()
@@ -174,7 +174,7 @@ def make_histograms(df):
 
     sns.kdeplot(df[df["coefficient"]=="sex"][df["estimator"] != "imputed"], ax=axs[1], x=r'$\sigma$', hue="estimator", fill=True, clip=(0,None))
     axs[1].set_ylabel("")
-    axs[1].set_xlabel("std of OLS summands (sex)")
+    axs[1].set_xlabel("std of summands (sex)")
     axs[1].set_yticks([])
     axs[1].set_yticklabels([])
     sns.despine(ax=axs[1],top=True,right=True,left=True)
