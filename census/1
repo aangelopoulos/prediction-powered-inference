@@ -1,6 +1,5 @@
 import os
 import numpy as np
-import torch
 import folktables
 import pdb
 import matplotlib.pyplot as plt
@@ -9,6 +8,7 @@ import pandas as pd
 
 from scipy.stats import norm
 from scipy.optimize import brentq
+from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
@@ -18,7 +18,7 @@ from tqdm import tqdm
 def filter(df):
     df.fillna(-1)
     df = df[(df['PINCP'] >= 0 ) & (df['PRIVCOV'] >= 0)]
-    df.loc[:,'PRIVCOV'] = 1-(df.loc[:,'PRIVCOV']-1)
+    df.loc[:,'PRIVCOV'] = 1-(df['PRIVCOV']-1)
     return df
 
 def get_data(year,features,outcome,filter=None,randperm=True):
@@ -33,19 +33,11 @@ def get_data(year,features,outcome,filter=None,randperm=True):
         df_features, df_outcome = df_features.iloc[shuffler], df_outcome.iloc[shuffler]
     return df_features, df_outcome
 
-def logistic(X, XTy, lr=1e-13):
-    betahat = 0.5*np.array([0,0.5])
-    for epoch in range(10000):
-        p = 1./(1. + np.exp(-X@betahat))
-        grad = (X.T@p - XTy)
-        betahat = betahat - lr*grad
-    return betahat
-
 def train_eval_regressor(features, outcome, add_bias=True):
     X_train, X_test, y_train, y_test = train_test_split(features, outcome, test_size=0.1)
-    dtrain = xgb.DMatrix(X_train.to_numpy(), label=y_train.to_numpy())
-    dtest = xgb.DMatrix(X_test.to_numpy(), label=y_test.to_numpy())
-    param = {'max_depth': 7, 'eta': 0.1, 'objective': 'reg:pseudohubererror', 'eval_metric': ['rmse','mae']}
+    dtrain = xgb.DMatrix(X_train, label=y_train)
+    dtest = xgb.DMatrix(X_test, label=y_test)
+    param = {'max_depth': 10, 'eta': 0.2, 'objective': 'reg:pseudohubererror', 'eval_metric': ['rmse','mae']}
     evallist = [(dtest, 'eval'), (dtrain, 'train')]
     num_round = 1000
     tree = xgb.train(param, dtrain, num_round, evallist)
@@ -60,7 +52,6 @@ def plot_data(pincp, privcov):
     plt.bar(range(len(bins)+2),avgs)
     #plt.gca().set_xticklabels(['<20K','20K-40K','40K-60K','60K-80K','80K-100K', '>100K'])
     plt.ylabel('frac w/private insurance')
-    plt.gca().set_ylim([0,1])
     plt.xlabel('household income ($)')
     sns.despine(top=True, right=True)
     plt.tight_layout()
@@ -68,41 +59,45 @@ def plot_data(pincp, privcov):
 
 def get_tree(year=2017):
     try:
-        tree = xgb.Booster()
-        tree.load_model(f"./.cache/logistic-model{year}.json")
+        income_tree = xgb.Booster()
+        income_tree.load_model(f"./.cache/logistic-model{year}.json")
     except:
-        features_2017, privcov_2017 = get_data(year=2017, features=['AGEP','SCHL','MAR','RELP','DIS','PINCP','ESP','CIT','MIG','MIL','ANC','NATIVITY','DEAR','DEYE','DREM','SEX','RAC1P'], outcome='PRIVCOV', filter=filter)
-        tree = train_eval_regressor(features_2017, privcov_2017)
+        income_features_2017, income_2017, employed_2017 = get_data(year=year, features=['AGEP','SCHL','MAR','RELP','DIS','ESP','CIT','MIG','MIL','ANC','NATIVITY','DEAR','DEYE','DREM','SEX','RAC1P'], outcome='PINCP')
+        age_2017 = income_features_2017['AGEP'].to_numpy()[employed_2017]
+        income_2017 = income_2017.to_numpy()[employed_2017]
+        sex_2017 = income_features_2017['SEX'].to_numpy()[employed_2017]
+        income_features_2017 = income_features_2017.to_numpy()[employed_2017,:]
+        income_tree = train_eval_regressor(income_features_2017, income_2017)
         os.makedirs("./.cache/", exist_ok=True)
-        tree.save_model(f"./.cache/logistic-model{year}.json")
-    return tree
+        income_tree.save_model(f"./.cache/logistic-model{year}.json")
+    return income_tree
 
-def trial(features_2018, privcov_2018, predicted_privcov_2018, coeff_true, N, n, delta):
-    X_labeled, X_unlabeled, Y_labeled, Y_unlabeled, Yhat_labeled, Yhat_unlabeled = train_test_split(features_2018, privcov_2018, predicted_privcov_2018, train_size=n)
+def trial(ols_features_2018, income_2018, predicted_income_2018, ols_coeff_true, N, n, delta):
+    X_labeled, X_unlabeled, Y_labeled, Y_unlabeled, Yhat_labeled, Yhat_unlabeled = train_test_split(ols_features_2018, income_2018, predicted_income_2018, train_size=n)
     X = np.concatenate([X_labeled, X_unlabeled],axis=0)
 
-    imputed_estimate = LogisticRegression().fit(X=X,y=np.concatenate([Y_labeled, Yhat_unlabeled], axis=0)).coef_
+    imputed_estimate = ols(X, np.concatenate([Y_labeled, Yhat_unlabeled], axis=0))
 
-    classical_estimate = LogisticRegression().fit(X=X_labeled, y=Y_labeled).coef_
+    classical_estimate = ols(X_labeled, Y_labeled)
 
-    classical_sigmahat = np.std(X_labeled.T*Y_labeled[None,:], axis=1)
+    classical_sigmahat = np.std(np.linalg.pinv(X)[:,:n]*Y_labeled[None,:], axis=1)
 
     classical_fluctuations = classical_sigmahat * norm.ppf(1-delta/2) * np.sqrt(N*(N-n)/n)
 
-    rectifier = np.abs(X_labeled.T.dot(Y_labeled-Yhat_labeled))
+    rectifier = (N/n)*(np.linalg.pinv(X)[:,:n].dot(Y_labeled-Yhat_labeled))
 
-    modelassisted_estimate = LogisticRegression().fit(X=X, y=np.concatenate([Yhat_labeled, Yhat_unlabeled], axis=0)).coef_
+    modelassisted_estimate = ols(X, np.concatenate([Yhat_labeled, Yhat_unlabeled], axis=0)) + rectifier
 
-    modelassisted_sigmahat = np.std(X_labeled.T*(Y_labeled[None,:]-Yhat_labeled[None,:]), axis=1)
+    modelassisted_sigmahat = np.std(np.linalg.pinv(X)[:,:n]*(Y_labeled-Yhat_labeled)[None,:], axis=1)
 
     fluctuations = modelassisted_sigmahat * norm.ppf(1-delta/2) * np.sqrt(N*(N-n)/n)
 
-    imputed_error = imputed_estimate - coeff_true
-    classical_error = classical_estimate - coeff_true
-    modelassisted_error = modelassisted_estimate - coeff_true
+    imputed_error = imputed_estimate - ols_coeff_true
+    classical_error = classical_estimate - ols_coeff_true
+    modelassisted_error = modelassisted_estimate - ols_coeff_true
 
     classical_width = classical_fluctuations
-    modelassisted_width = rectifier + fluctuations
+    modelassisted_width = fluctuations
 
     classical_covered = np.abs(classical_error) <= classical_width
     modelassisted_covered = np.abs(modelassisted_error) <= modelassisted_width
@@ -114,6 +109,7 @@ def make_histograms(df):
     df["error"] = df["error"].abs()
     fig, axs = plt.subplots(ncols=2, figsize=(7.5, 2.5))
     sns.set_theme(style="white", palette="pastel")
+    pdb.set_trace()
     kde0 = sns.kdeplot(df[df["coefficient"]=="age"][df["estimator"] != "imputed"], ax=axs[0], x="error", hue="estimator", fill=True, clip=(0,None))
     axs[0].axvline(x=df[df["coefficient"]=="age"][df["estimator"] == "imputed"]["error"].mean(), label="imputed", color="#7EAC95")
     axs[0].set_ylabel("")
@@ -193,39 +189,37 @@ if __name__ == "__main__":
     except:
         # Train tree on 2017 data
         np.random.seed(0) # Fix seed for tree
-        tree = get_tree()
+        #income_tree = get_tree()
         np.random.seed(0) # Fix seed for evaluation
 
         # Evaluate tree and plot data in 2018
         features_2018, privcov_2018 = get_data(year=2018, features=['AGEP','SCHL','MAR','RELP','DIS','PINCP','ESP','CIT','MIG','MIL','ANC','NATIVITY','DEAR','DEYE','DREM','SEX','RAC1P'], outcome='PRIVCOV', filter=filter)
-        predicted_privcov_2018 = tree.predict(xgb.DMatrix(features_2018.to_numpy()))
+        #predicted_income_2018 = income_tree.predict(xgb.DMatrix(features_2018.to_numpy()))
         pincp_2018 = features_2018['PINCP']
         plot_data(pincp_2018, privcov_2018)
 
-        # Collect logistic features and do MAI
-        X = np.stack([pincp_2018, np.ones_like(pincp_2018)], axis=1)
-        XTy = X.T@privcov_2018
-        coeff_true = logistic(X, XTy)
-        print(f"True logistic regression coefficients: {coeff_true}")
-
 """
-        N = features_2018.shape[0]
+        # Collect OLS features and do MAI
+        ols_features_2018 = np.stack([age_2018, sex_2018], axis=1)
+        ols_coeff_true = ols(ols_features_2018, income_2018)
+        print(f"True OLS coefficients: {ols_coeff_true}")
+        N = ols_features_2018.shape[0]
         n = 500
         num_trials = 100
         delta = 0.05
 
         # Store results
-        columns = ["error","width","covered", r'$\sigma$', "estimator"]
-        df = pd.DataFrame(np.zeros((num_trials*3,len(columns))), columns=columns)
+        columns = ["error","width","covered", r'$\sigma$', "estimator","coefficient"]
+        df = pd.DataFrame(np.zeros((num_trials*3*2,len(columns))), columns=columns)
 
         for i in tqdm(range(num_trials)):
-            imputed_error, classical_error, modelassisted_error, classical_width, modelassisted_width, classical_covered, modelassisted_covered, classical_sigma, modelassisted_sigma = trial(pincp_2018[:,None], privcov_2018, predicted_privcov_2018, coeff_true, N, n, delta)
-            df.loc[i] = imputed_error[0], -1, 0, 0, "imputed"
-            df.loc[i+num_trials] = imputed_error[1], -1, 0, 0, "imputed"
-            df.loc[i+2*num_trials] = classical_error[0], classical_width[0], int(classical_covered[0]), classical_sigma[0], "classical"
-            df.loc[i+3*num_trials] = classical_error[1], classical_width[1], int(classical_covered[1]), classical_sigma[1], "classical"
-            df.loc[i+4*num_trials] = modelassisted_error[0], modelassisted_width[0], int(modelassisted_covered[0]), modelassisted_sigma[0], "model assisted"
-            df.loc[i+5*num_trials] = modelassisted_error[1], modelassisted_width[1], int(modelassisted_covered[1]), modelassisted_sigma[1], "model assisted"
+            imputed_error, classical_error, modelassisted_error, classical_width, modelassisted_width, classical_covered, modelassisted_covered, classical_sigma, modelassisted_sigma = trial(ols_features_2018, income_2018, predicted_income_2018, ols_coeff_true, N, n, delta)
+            df.loc[i] = imputed_error[0], -1, 0, 0, "imputed", "age"
+            df.loc[i+num_trials] = imputed_error[1], -1, 0, 0, "imputed", "sex"
+            df.loc[i+2*num_trials] = classical_error[0], classical_width[0], int(classical_covered[0]), classical_sigma[0], "classical", "age"
+            df.loc[i+3*num_trials] = classical_error[1], classical_width[1], int(classical_covered[1]), classical_sigma[1], "classical", "sex"
+            df.loc[i+4*num_trials] = modelassisted_error[0], modelassisted_width[0], int(modelassisted_covered[0]), modelassisted_sigma[0], "model assisted", "age"
+            df.loc[i+5*num_trials] = modelassisted_error[1], modelassisted_width[1], int(modelassisted_covered[1]), modelassisted_sigma[1], "model assisted", "sex"
         df.to_pickle('./.cache/logistic-results.pkl')
     make_histograms(df)
 """
