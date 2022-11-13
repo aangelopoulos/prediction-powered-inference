@@ -33,12 +33,13 @@ def get_data(year,features,outcome,filter=None,randperm=True):
         df_features, df_outcome = df_features.iloc[shuffler], df_outcome.iloc[shuffler]
     return df_features, df_outcome
 
-def logistic(X, XTy, lr=1e-13):
+def logistic(X, XTy, lr=1e-11):
     betahat = 0.5*np.array([0,0.5])
-    for epoch in range(10000):
+    for epoch in range(1000):
         p = 1./(1. + np.exp(-X@betahat))
         grad = (X.T@p - XTy)
-        betahat = betahat - lr*grad
+        betahat = betahat - (lr*1/((epoch+1)**2))*grad # With quadratic learning rate decay
+        print(betahat)
     return betahat
 
 def train_eval_regressor(features, outcome, add_bias=True):
@@ -78,20 +79,24 @@ def get_tree(year=2017):
     return tree
 
 def trial(features_2018, privcov_2018, predicted_privcov_2018, coeff_true, N, n, delta):
+    features_2018 = np.concatenate([features_2018, np.ones((features_2018.shape[0],1))], axis=1)
+
     X_labeled, X_unlabeled, Y_labeled, Y_unlabeled, Yhat_labeled, Yhat_unlabeled = train_test_split(features_2018, privcov_2018, predicted_privcov_2018, train_size=n)
+
     X = np.concatenate([X_labeled, X_unlabeled],axis=0)
 
-    imputed_estimate = LogisticRegression().fit(X=X,y=np.concatenate([Y_labeled, Yhat_unlabeled], axis=0)).coef_
+    imputed_estimate = logistic(X,X.T@np.concatenate([Y_labeled, Yhat_unlabeled], axis=0))
 
-    classical_estimate = LogisticRegression().fit(X=X_labeled, y=Y_labeled).coef_
+    classical_estimate = logistic(X_labeled, X_labeled.T@Y_labeled)
 
     classical_sigmahat = np.std(X_labeled.T*Y_labeled[None,:], axis=1)
 
     classical_fluctuations = classical_sigmahat * norm.ppf(1-delta/2) * np.sqrt(N*(N-n)/n)
 
-    rectifier = np.abs(X_labeled.T.dot(Y_labeled-Yhat_labeled))
+    rectifier = np.abs(X_labeled.T@(Y_labeled-Yhat_labeled))
+    pdb.set_trace()
 
-    modelassisted_estimate = LogisticRegression().fit(X=X, y=np.concatenate([Yhat_labeled, Yhat_unlabeled], axis=0)).coef_
+    modelassisted_estimate = logistic(X, X.T@np.concatenate([Yhat_labeled, Yhat_unlabeled], axis=0))
 
     modelassisted_sigmahat = np.std(X_labeled.T*(Y_labeled[None,:]-Yhat_labeled[None,:]), axis=1)
 
@@ -203,12 +208,12 @@ if __name__ == "__main__":
         plot_data(pincp_2018, privcov_2018)
 
         # Collect logistic features and do MAI
+        pincp_2018 = pincp_2018
         X = np.stack([pincp_2018, np.ones_like(pincp_2018)], axis=1)
         XTy = X.T@privcov_2018
         coeff_true = logistic(X, XTy)
         print(f"True logistic regression coefficients: {coeff_true}")
 
-"""
         N = features_2018.shape[0]
         n = 500
         num_trials = 100
@@ -228,4 +233,3 @@ if __name__ == "__main__":
             df.loc[i+5*num_trials] = modelassisted_error[1], modelassisted_width[1], int(modelassisted_covered[1]), modelassisted_sigma[1], "model assisted"
         df.to_pickle('./.cache/logistic-results.pkl')
     make_histograms(df)
-"""
