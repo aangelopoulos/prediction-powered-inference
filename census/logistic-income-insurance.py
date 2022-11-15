@@ -134,7 +134,7 @@ def trial(X, privcov_2018, predicted_privcov_2018, coeff_true, N, n, delta):
 
 def make_histograms(df):
     # Width figure
-    plt.figure(figsize=(7.5, 2.5))
+    plt.figure(figsize=(5.5, 2.5))
     my_palette = sns.color_palette(["#71D26F","#BFB9B9"], 2)
     sns.set_theme(style="white", palette=my_palette)
     kde = sns.kdeplot(df[df["estimator"] != "imputed"], x="width", hue="estimator", fill=True, clip=(0,None), hue_order=["model assisted","classical"])
@@ -145,7 +145,8 @@ def make_histograms(df):
     kde.legend_.set_title(None)
     sns.despine(top=True,right=True,left=True)
     plt.gca().legend(loc="best", labels=["classical", "model-assisted"])
-    plt.savefig('./logistic-plots/width.pdf')
+    plt.tight_layout()
+    plt.savefig('./logistic-plots/width.pdf', bbox_inches="tight")
 
     cvg_classical = (df[df["estimator"]=="classical"]["covered"]).mean()
     cvg_modelassisted = (df[df["estimator"]=="model assisted"]["covered"]).mean()
