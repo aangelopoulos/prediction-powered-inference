@@ -87,7 +87,7 @@ def trial(ols_features_2018, income_2018, predicted_income_2018, ols_coeff_true,
 
     imputed_estimate = ols(X, np.concatenate([Y_labeled, Yhat_unlabeled], axis=0))
 
-    classical_estimate = ols(X_labeled, Y_labeled)
+    classical_estimate = (N/n) * np.linalg.pinv(X)[:,:n].dot(Y_labeled)
 
     classical_sigmahat = np.std(np.linalg.pinv(X)[:,:n]*Y_labeled[None,:], axis=1)
 
@@ -120,8 +120,8 @@ def make_histograms(df):
     df["error"] = df["error"].abs()
     fig, axs = plt.subplots(ncols=2, figsize=(7.5, 2.5))
     sns.set_theme(style="white", palette=my_palette)
-    kde0 = sns.kdeplot(df[df["coefficient"]=="age"][df["estimator"] != "imputed"], ax=axs[0], x="error", hue="estimator", hue_order=["model assisted", "classical"], fill=True, clip=(0,None))
     axs[0].axvline(x=df[df["coefficient"]=="age"][df["estimator"] == "imputed"]["error"].mean(), label="imputed", color="#F1C294", linestyle='dashed')
+    kde0 = sns.kdeplot(df[df["coefficient"]=="age"][df["estimator"] != "imputed"], ax=axs[0], x="error", hue="estimator", hue_order=["model assisted", "classical"], fill=True, clip=(0,None))
     axs[0].set_ylabel("")
     axs[0].set_xlabel("error (age coefficient, $/yr of age)")
     axs[0].set_yticklabels([])
@@ -129,13 +129,13 @@ def make_histograms(df):
     kde0.get_legend().remove()
     sns.despine(ax=axs[0],top=True,right=True,left=True)
 
-    sns.kdeplot(df[df["coefficient"]=="sex"][df["estimator"] != "imputed"], ax=axs[1], x="error", hue="estimator", hue_order=["model assisted", "classical"], fill=True, clip=(0,None))
     l = axs[1].axvline(x=df[df["coefficient"]=="sex"][df["estimator"] == "imputed"]["error"].mean(), label="imputed", color="#F1C294", linestyle='dashed')
+    sns.kdeplot(df[df["coefficient"]=="sex"][df["estimator"] != "imputed"], ax=axs[1], x="error", hue="estimator", hue_order=["model assisted", "classical"], fill=True, clip=(0,None))
     axs[1].set_ylabel("")
     axs[1].set_xlabel("error (sex coefficient, $)")
     axs[1].set_yticklabels([])
     axs[1].set_yticks([])
-    axs[1].legend(["classical", "model-assisted", "imputed"])
+    axs[1].legend(["imputed", "classical", "model-assisted"])
     sns.despine(ax=axs[1],top=True,right=True,left=True)
     fig.suptitle("") # This is here for spacing
     plt.tight_layout()
