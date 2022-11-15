@@ -104,6 +104,7 @@ def trial(ols_features_2018, income_2018, predicted_income_2018, ols_coeff_true,
     imputed_error = imputed_estimate - ols_coeff_true
     classical_error = classical_estimate - ols_coeff_true
     modelassisted_error = modelassisted_estimate - ols_coeff_true
+    print(imputed_error, classical_error, modelassisted_error)
 
     classical_width = classical_fluctuations
     modelassisted_width = fluctuations
