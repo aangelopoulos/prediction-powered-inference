@@ -82,7 +82,7 @@ def get_logical_ci(x_n, N):
 
     For example, if the sum of our labeled data is 5 and N is 10, then the true mean
     cannot be any less than 0.5, assuming all observations are between 0 and 1.
-    
+
     Parameters
     ----------
     x, array-like of reals between 0 and 1
