@@ -40,7 +40,7 @@ def B_wor(N, x_n, m, alpha, c: float = 3 / 4, theta: float = 1 / 2, convex_comb:
     multiplicandpos_n[np.logical_and(lambdaplus_n == math.inf, x_n - mwor_n == 0)] = 1
     with np.errstate(invalid="ignore"):
         Kworpos_n = np.exp(np.cumsum(np.log(multiplicandpos_n)))
-    # If we get nans from 0 * inf, this should be 0
+    # if have nans from 0 * inf, this should be 0
     Kworpos_n[np.isnan(Kworpos_n)] = 0
 
     multiplicandneg_n = 1 - lambdaminus_n * (x_n - mwor_n)
@@ -77,24 +77,11 @@ def get_odds_ratio_ci_from_mu_ci(mu1_ci, mu0_ci):
 
 def get_logical_ci(x_n, N):
     """
-    The confidence interval that would be known for sampling w/o replacement,
-    regardless of the concentration strategy used.
+    Confidence interval that would be known for sampling w/o replacement,
+    regardless of concentration strategy used.
 
     For example, if the sum of our labeled data is 5 and N is 10, then the true mean
-    cannot be any less than 0.5, assuming all observations are between 0 and 1.
-
-    Parameters
-    ----------
-    x, array-like of reals between 0 and 1
-        The observed bounded random variables.
-    N, integer
-        The size of the finite population
-    Returns
-    -------
-    l, array-like
-        Lower logical confidence sequence for the parameter
-    u, array-like
-        Upper logical confidence sequence for the parameter
+    cannot be any less than 0.5 (assuming all observations are between 0 and 1).
     """
     t = np.arange(1, x_n.size + 1)
     S_n = np.cumsum(x_n)
