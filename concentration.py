@@ -16,7 +16,7 @@ def binomial_iid(N,delta,muhat):
 def bentkus_iid(N, delta, muhat):
     return binomial_iid(N, delta/np.e, muhat)
 
-def wsr_iid(x,delta,grid,num_cpus=10): # x is a [0,1] bounded sequence
+def wsr_iid(x,delta,grid,num_cpus=10,step=1): # x is a [0,1] bounded sequence
     n = x.shape[0]
     muhats = (1/2 + np.cumsum(x))/(np.arange(n)+1)
     sigmahat2s = (1/4 + np.cumsum((x-muhats)**2))/(np.arange(n)+1)
@@ -26,7 +26,7 @@ def wsr_iid(x,delta,grid,num_cpus=10): # x is a [0,1] bounded sequence
         np.prod(1-np.minimum(lambdas[:i], 1/(1-m))*(x[:i]-m))
     )
     M = np.vectorize(M)
-    M_list = Parallel(n_jobs=num_cpus)(delayed(M)(grid,i) for i in range(1,n+1))
+    M_list = Parallel(n_jobs=num_cpus)(delayed(M)(grid,i) for i in range(1,n+step,step))
     ci_full = grid[np.where(np.prod(np.stack(M_list, axis=1) < 1/delta , axis=1))[0]]
     return np.array([ci_full.min(), ci_full.max()]) # only output the interval
 
