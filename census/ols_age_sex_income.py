@@ -95,24 +95,24 @@ def trial(ols_features_2018, income_2018, predicted_income_2018, ols_coeff_true,
 
     rectifier = (N/n)*(np.linalg.pinv(X)[:,:n].dot(Y_labeled-Yhat_labeled))
 
-    modelassisted_estimate = ols(X, np.concatenate([Yhat_labeled, Yhat_unlabeled], axis=0)) + rectifier
+    predictionpowered_estimate = ols(X, np.concatenate([Yhat_labeled, Yhat_unlabeled], axis=0)) + rectifier
 
-    modelassisted_sigmahat = np.std(np.linalg.pinv(X)[:,:n]*(Y_labeled-Yhat_labeled)[None,:], axis=1)
+    predictionpowered_sigmahat = np.std(np.linalg.pinv(X)[:,:n]*(Y_labeled-Yhat_labeled)[None,:], axis=1)
 
-    fluctuations = modelassisted_sigmahat * norm.ppf(1-delta/2) * np.sqrt(N*(N-n)/n)
+    fluctuations = predictionpowered_sigmahat * norm.ppf(1-delta/2) * np.sqrt(N*(N-n)/n)
 
     imputed_error = imputed_estimate - ols_coeff_true
     classical_error = classical_estimate - ols_coeff_true
-    modelassisted_error = modelassisted_estimate - ols_coeff_true
-    print(imputed_error, classical_error, modelassisted_error)
+    predictionpowered_error = predictionpowered_estimate - ols_coeff_true
+    print(imputed_error, classical_error, predictionpowered_error)
 
     classical_width = classical_fluctuations
-    modelassisted_width = fluctuations
+    predictionpowered_width = fluctuations
 
     classical_covered = np.abs(classical_error) <= classical_width
-    modelassisted_covered = np.abs(modelassisted_error) <= modelassisted_width
+    predictionpowered_covered = np.abs(predictionpowered_error) <= predictionpowered_width
 
-    return imputed_error, classical_error, modelassisted_error, classical_width, modelassisted_width, classical_covered, modelassisted_covered, classical_sigmahat, modelassisted_sigmahat
+    return imputed_error, classical_error, predictionpowered_error, classical_width, predictionpowered_width, classical_covered, predictionpowered_covered, classical_sigmahat, predictionpowered_sigmahat
 
 def make_histograms(df):
     # Error figure
@@ -121,7 +121,7 @@ def make_histograms(df):
     fig, axs = plt.subplots(ncols=2, figsize=(7.5, 2.5))
     sns.set_theme(style="white", palette=my_palette)
     axs[0].axvline(x=df[df["coefficient"]=="age"][df["estimator"] == "imputed"]["error"].mean(), label="imputed", color="#F1C294", linestyle='dashed')
-    kde0 = sns.kdeplot(df[df["coefficient"]=="age"][df["estimator"] != "imputed"], ax=axs[0], x="error", hue="estimator", hue_order=["model assisted", "classical"], fill=True, clip=(0,None))
+    kde0 = sns.kdeplot(df[df["coefficient"]=="age"][df["estimator"] != "imputed"], ax=axs[0], x="error", hue="estimator", hue_order=["prediction-powered", "classical"], fill=True, clip=(0,None))
     axs[0].set_ylabel("")
     axs[0].set_xlabel("error (age coefficient, $/yr of age)")
     axs[0].set_yticklabels([])
@@ -130,12 +130,12 @@ def make_histograms(df):
     sns.despine(ax=axs[0],top=True,right=True,left=True)
 
     l = axs[1].axvline(x=df[df["coefficient"]=="sex"][df["estimator"] == "imputed"]["error"].mean(), label="imputed", color="#F1C294", linestyle='dashed')
-    sns.kdeplot(df[df["coefficient"]=="sex"][df["estimator"] != "imputed"], ax=axs[1], x="error", hue="estimator", hue_order=["model assisted", "classical"], fill=True, clip=(0,None))
+    sns.kdeplot(df[df["coefficient"]=="sex"][df["estimator"] != "imputed"], ax=axs[1], x="error", hue="estimator", hue_order=["prediction-powered", "classical"], fill=True, clip=(0,None))
     axs[1].set_ylabel("")
     axs[1].set_xlabel("error (sex coefficient, $)")
     axs[1].set_yticklabels([])
     axs[1].set_yticks([])
-    axs[1].legend(["imputed", "classical", "model-assisted"])
+    axs[1].legend(["imputed", "classical", "prediction-powered"])
     sns.despine(ax=axs[1],top=True,right=True,left=True)
     fig.suptitle("") # This is here for spacing
     plt.tight_layout()
@@ -144,7 +144,7 @@ def make_histograms(df):
     # Width figure
     fig, axs = plt.subplots(ncols=2, figsize=(7.5, 2.5))
     sns.set_theme(style="white", palette=my_palette)
-    kde0 = sns.kdeplot(df[df["coefficient"]=="age"][df["estimator"] != "imputed"], ax=axs[0], x="width", hue="estimator", hue_order=["model assisted", "classical"], fill=True, clip=(0,None))
+    kde0 = sns.kdeplot(df[df["coefficient"]=="age"][df["estimator"] != "imputed"], ax=axs[0], x="width", hue="estimator", hue_order=["prediction-powered", "classical"], fill=True, clip=(0,None))
     axs[0].set_ylabel("")
     axs[0].set_xlabel("width (age coefficient, $/yr of age)")
     axs[0].set_yticks([])
@@ -152,7 +152,7 @@ def make_histograms(df):
     kde0.get_legend().remove()
     sns.despine(ax=axs[0],top=True,right=True,left=True)
 
-    sns.kdeplot(df[df["coefficient"]=="sex"][df["estimator"] != "imputed"], ax=axs[1], x="width", hue="estimator", hue_order=["model assisted", "classical"], fill=True, clip=(0,None))
+    sns.kdeplot(df[df["coefficient"]=="sex"][df["estimator"] != "imputed"], ax=axs[1], x="width", hue="estimator", hue_order=["prediction-powered", "classical"], fill=True, clip=(0,None))
     axs[1].set_ylabel("")
     axs[1].set_xlabel("width (sex coefficient, $)")
     axs[1].set_yticks([])
@@ -160,13 +160,13 @@ def make_histograms(df):
     sns.despine(ax=axs[1],top=True,right=True,left=True)
     fig.suptitle("") # This is here for spacing
     plt.tight_layout()
-    axs[1].legend(["classical", "model-assisted"], bbox_to_anchor = (1.,1.2) )
+    axs[1].legend(["classical", "prediction-powered"], bbox_to_anchor = (1.,1.2) )
     plt.savefig('./ols-plots/width.pdf')
 
     # Standard deviation figure
     fig, axs = plt.subplots(ncols=2, figsize=(7.5, 2.5))
     sns.set_theme(style="white", palette=my_palette)
-    kde0 = sns.kdeplot(df[df["coefficient"]=="age"][df["estimator"] != "imputed"], ax=axs[0], x=r'$\sigma$', hue="estimator", hue_order=["model assisted", "classical"], fill=True, clip=(0,None))
+    kde0 = sns.kdeplot(df[df["coefficient"]=="age"][df["estimator"] != "imputed"], ax=axs[0], x=r'$\sigma$', hue="estimator", hue_order=["prediction-powered", "classical"], fill=True, clip=(0,None))
     axs[0].set_ylabel("")
     axs[0].set_xlabel("std of summands (age)")
     axs[0].set_yticks([])
@@ -174,7 +174,7 @@ def make_histograms(df):
     kde0.get_legend().remove()
     sns.despine(ax=axs[0],top=True,right=True,left=True)
 
-    sns.kdeplot(df[df["coefficient"]=="sex"][df["estimator"] != "imputed"], ax=axs[1], x=r'$\sigma$', hue="estimator", hue_order=["model assisted", "classical"], fill=True, clip=(0,None))
+    sns.kdeplot(df[df["coefficient"]=="sex"][df["estimator"] != "imputed"], ax=axs[1], x=r'$\sigma$', hue="estimator", hue_order=["prediction-powered", "classical"], fill=True, clip=(0,None))
     axs[1].set_ylabel("")
     axs[1].set_xlabel("std of summands (sex)")
     axs[1].set_yticks([])
@@ -182,15 +182,15 @@ def make_histograms(df):
     sns.despine(ax=axs[1],top=True,right=True,left=True)
     fig.suptitle("") # This is here for spacing
     plt.tight_layout()
-    axs[1].legend(["classical", "model-assisted"], bbox_to_anchor = (1.,1.2) )
+    axs[1].legend(["classical", "prediction-powered"], bbox_to_anchor = (1.,1.2) )
     plt.savefig('./ols-plots/stds.pdf')
 
     cvg_classical_age = (df[(df["estimator"]=="classical") & (df["coefficient"]=="age")]["covered"]).mean()
     cvg_classical_sex = (df[(df["estimator"]=="classical") & (df["coefficient"]=="sex")]["covered"]).mean()
-    cvg_modelassisted_age = (df[(df["estimator"]=="model assisted") & (df["coefficient"]=="age")]["covered"]).mean()
-    cvg_modelassisted_sex = (df[(df["estimator"]=="model assisted") & (df["coefficient"]=="sex")]["covered"]).mean()
+    cvg_predictionpowered_age = (df[(df["estimator"]=="prediction-powered") & (df["coefficient"]=="age")]["covered"]).mean()
+    cvg_predictionpowered_sex = (df[(df["estimator"]=="prediction-powered") & (df["coefficient"]=="sex")]["covered"]).mean()
 
-    print(f"Myopic coverage ({cvg_classical_age},{cvg_classical_sex}), model-assisted ({cvg_modelassisted_age},{cvg_modelassisted_sex})")
+    print(f"Myopic coverage ({cvg_classical_age},{cvg_classical_sex}), prediction-powered ({cvg_predictionpowered_age},{cvg_predictionpowered_sex})")
 
 if __name__ == "__main__":
     os.makedirs('./ols-plots', exist_ok=True)
@@ -225,12 +225,12 @@ if __name__ == "__main__":
         df = pd.DataFrame(np.zeros((num_trials*3*2,len(columns))), columns=columns)
 
         for i in tqdm(range(num_trials)):
-            imputed_error, classical_error, modelassisted_error, classical_width, modelassisted_width, classical_covered, modelassisted_covered, classical_sigma, modelassisted_sigma = trial(ols_features_2018, income_2018, predicted_income_2018, ols_coeff_true, N, n, delta)
+            imputed_error, classical_error, predictionpowered_error, classical_width, predictionpowered_width, classical_covered, predictionpowered_covered, classical_sigma, predictionpowered_sigma = trial(ols_features_2018, income_2018, predicted_income_2018, ols_coeff_true, N, n, delta)
             df.loc[i] = imputed_error[0], -1, 0, 0, "imputed", "age"
             df.loc[i+num_trials] = imputed_error[1], -1, 0, 0, "imputed", "sex"
             df.loc[i+2*num_trials] = classical_error[0], classical_width[0], int(classical_covered[0]), classical_sigma[0], "classical", "age"
             df.loc[i+3*num_trials] = classical_error[1], classical_width[1], int(classical_covered[1]), classical_sigma[1], "classical", "sex"
-            df.loc[i+4*num_trials] = modelassisted_error[0], modelassisted_width[0], int(modelassisted_covered[0]), modelassisted_sigma[0], "model assisted", "age"
-            df.loc[i+5*num_trials] = modelassisted_error[1], modelassisted_width[1], int(modelassisted_covered[1]), modelassisted_sigma[1], "model assisted", "sex"
+            df.loc[i+4*num_trials] = predictionpowered_error[0], predictionpowered_width[0], int(predictionpowered_covered[0]), predictionpowered_sigma[0], "prediction-powered", "age"
+            df.loc[i+5*num_trials] = predictionpowered_error[1], predictionpowered_width[1], int(predictionpowered_covered[1]), predictionpowered_sigma[1], "prediction-powered", "sex"
         df.to_pickle('./.cache/ols-results.pkl')
     make_histograms(df)
