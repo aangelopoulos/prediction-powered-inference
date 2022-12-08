@@ -16,7 +16,7 @@ def binomial_iid(N,delta,muhat):
 def bentkus_iid(N, delta, muhat):
     return binomial_iid(N, delta/np.e, muhat)
 
-def wsr_iid(x,delta,grid,num_cpus=10,step=1): # x is a [0,1] bounded sequence
+def wsr_iid_ana(x,delta,grid,num_cpus=10,step=1): # x is a [0,1] bounded sequence
     n = x.shape[0]
     muhats = (1/2 + np.cumsum(x))/(np.arange(n)+1)
     sigmahat2s = (1/4 + np.cumsum((x-muhats)**2))/(np.arange(n)+1)
@@ -28,6 +28,48 @@ def wsr_iid(x,delta,grid,num_cpus=10,step=1): # x is a [0,1] bounded sequence
     M = np.vectorize(M)
     M_list = Parallel(n_jobs=num_cpus)(delayed(M)(grid,i) for i in range(1,n+step,step))
     ci_full = grid[np.where(np.prod(np.stack(M_list, axis=1) < 1/delta , axis=1))[0]]
+    return np.array([ci_full.min(), ci_full.max()]) # only output the interval
+
+def wsr_iid(x_n, delta, grid, num_cpus=10, parallelize: bool = False, intersection: bool = True):
+    n = x_n.shape[0]
+    t_n = np.arange(1, n + 1)
+    muhat_n = (0.5 + np.cumsum(x_n)) / (1 + t_n)
+    sigma2hat_n = (0.25 + np.cumsum(np.power(x_n - muhat_n, 2))) / (1 + t_n)
+    sigma2hat_tminus1_n = np.append(0.25, sigma2hat_n[: -1])
+    assert(np.all(sigma2hat_tminus1_n > 0))
+    lambda_n = np.sqrt(2 * np.log(2 / delta) / (n * sigma2hat_tminus1_n))
+
+    def M(m):
+        lambdaplus_n = np.minimum(lambda_n, 0.75 / m)
+        lambdaminus_n = np.minimum(lambda_n, 0.75 / (1 - m))
+        return 1/2 * np.maximum(
+            np.exp(np.cumsum(np.log(1 + lambdaplus_n * (x_n - m)))),
+            np.exp(np.cumsum(np.log(1 - lambdaminus_n * (x_n - m))))
+        )
+
+    if parallelize:  # sometimes much slower
+        M = np.vectorize(M)
+        M_list = Parallel(n_jobs=num_cpus)(delayed(M)(m) for m in grid)
+        indicators_gxn = np.array(M_list) < 1 / delta
+    else:
+        indicators_gxn = np.zeros([grid.size, n])
+        found_lb = False
+        for m_idx, m in enumerate(grid):
+            m_n = M(m)
+            indicators_gxn[m_idx] = m_n < 1 / delta
+            if not found_lb and np.prod(indicators_gxn[m_idx]):
+                found_lb = True
+            if found_lb and not np.prod(indicators_gxn[m_idx]):
+                break  # since interval, once find a value that fails, stop searching
+    if intersection:
+        ci_full = grid[np.where(np.prod(indicators_gxn, axis=1))[0]]
+    else:
+        ci_full =  grid[np.where(indicators_gxn[:, -1])[0]]
+    if ci_full.size == 0:  # grid maybe too coarse
+        idx = np.argmax(np.sum(indicators_gxn, axis=1))
+        if idx == 0:
+            return np.array([grid[0], grid[1]])
+        return np.array([grid[idx - 1], grid[idx]])
     return np.array([ci_full.min(), ci_full.max()]) # only output the interval
 
 """
