@@ -30,7 +30,8 @@ def wsr_iid_ana(x,delta,grid,num_cpus=10,step=1): # x is a [0,1] bounded sequenc
     ci_full = grid[np.where(np.prod(np.stack(M_list, axis=1) < 1/delta , axis=1))[0]]
     return np.array([ci_full.min(), ci_full.max()]) # only output the interval
 
-def wsr_iid(x_n, delta, grid, num_cpus=10, parallelize: bool = False, intersection: bool = True):
+def wsr_iid(x_n, delta, grid, num_cpus=10, parallelize: bool = False, intersection: bool = True,
+            theta: float = 0.5, c: float = 0.75):
     n = x_n.shape[0]
     t_n = np.arange(1, n + 1)
     muhat_n = (0.5 + np.cumsum(x_n)) / (1 + t_n)
@@ -40,11 +41,11 @@ def wsr_iid(x_n, delta, grid, num_cpus=10, parallelize: bool = False, intersecti
     lambda_n = np.sqrt(2 * np.log(2 / delta) / (n * sigma2hat_tminus1_n))
 
     def M(m):
-        lambdaplus_n = np.minimum(lambda_n, 0.75 / m)
-        lambdaminus_n = np.minimum(lambda_n, 0.75 / (1 - m))
-        return 1/2 * np.maximum(
-            np.exp(np.cumsum(np.log(1 + lambdaplus_n * (x_n - m)))),
-            np.exp(np.cumsum(np.log(1 - lambdaminus_n * (x_n - m))))
+        lambdaplus_n = np.minimum(lambda_n, c / m)
+        lambdaminus_n = np.minimum(lambda_n, c / (1 - m))
+        return np.maximum(
+            theta * np.exp(np.cumsum(np.log(1 + lambdaplus_n * (x_n - m)))),
+            (1 - theta) * np.exp(np.cumsum(np.log(1 - lambdaminus_n * (x_n - m))))
         )
 
     if parallelize:  # sometimes much slower
