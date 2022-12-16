@@ -4,8 +4,12 @@ import numpy as np
 import scipy as sc
 from concentration import wsr_iid
 from sklearn.model_selection import train_test_split
+from sklearn.linear_model import QuantileRegressor
 
 def get_quantile(y_n, q, y_lb: float = -np.inf, y_ub: float = np.inf):
+    """
+    Compared to numpy.quantile, no interpolation.
+    """
     assert(q >= 0 and q <= 1)
     sortedy_n = np.sort(y_n)
     if q == 0:
@@ -37,37 +41,46 @@ def get_classical_ci(y_n, q, alpha, y_lb: float = -np.inf, y_ub: float = np.inf)
     else:
         assert(y_ub > sortedy_n[-1])
         ub = y_ub
-    # ql = float(l) / n
-    # qu = float(u + 1) / n
-    # assert(ql >= 0 and ql <= 1)
-    # assert(qu >= 0 and qu <= 1)
     return lb, ub
 
-def trial(y_all, f_all, q, n, alpha, delta, theta_grid, parallelize, eps: float = 1e-3, c: float = 0.75, use_hoeffding: bool = True):
-    # TODO: make this mimic IID better?
-    y_n, y_N, f_n, f_N = train_test_split(y_all, f_all, train_size=n)
+def trial(y_all, f_all, q, n, alpha, delta, theta_grid, eps: float = 1e-3, c: float = 0.75, n_train: int = 10):
+    y_n, y_N, pred_n, pred_N = train_test_split(y_all, f_all, train_size=n)
     ci_cl = get_classical_ci(y_n, q, alpha)
 
-    Cthetas = [
-        wsr_iid( ((y_n <= theta).astype(float) - (f_n <= theta).astype(float) + 1) / 2,  # rescale into [0, 1]
-                delta, np.arange(eps, 1, eps), parallelize=parallelize, c=c) * 2 - 1 for theta in theta_grid]
-    q_diff = [q - (f_N <= theta).mean() for theta in theta_grid]
-    if use_hoeffding:
-        hoeff =  np.sqrt(np.log(2 / (alpha - delta)) / (2 * y_N.size))
-    else:
-        hoeff = 0
-    indexes = np.array(
-        [(Cthetas[j][0] - hoeff <= q_diff[j]) & (Cthetas[j][1] + hoeff >= q_diff[j]) for j in range(theta_grid.size)]
+    # fit median regressor with handful of labeled data points
+    predictor = QuantileRegressor(quantile=0.5, alpha=1e-6)
+    train_idx = np.random.choice(n, n_train, replace=False)
+    lab_idx = np.delete(np.arange(n), train_idx)  # n - n_train remaining labeled data points
+    assert(lab_idx.size == n - n_train)
+    predictor.fit(pred_n[train_idx, None], y_n[train_idx])
+    f_n = predictor.predict(pred_n[lab_idx, None])
+    f_N = predictor.predict(pred_N[:, None])
+    y_n = y_n[lab_idx]
+    assert(f_n.shape == y_n.shape)
+    assert(f_N.shape == y_N.shape)
+
+    # construct confidence intervals on rectifier per candidate theta
+    Rci_t = [
+        wsr_iid(((f_n <= theta).astype(float) - (y_n <= theta).astype(float) + 1) / 2,  # rescale into [0, 1]
+                delta, np.arange(eps, 1, eps), parallelize=False, c=c) * 2 - 1 for theta in theta_grid
+    ]
+    fcdf_t = [(f_N <= theta).mean() for theta in theta_grid]
+    # hoeffding term
+    hoeff =  np.sqrt(np.log(2 / (alpha - delta)) / (2 * f_N.size))
+
+    include_t = np.array(
+        [(q + Rci_t[t][0] - hoeff <= fcdf_t[t]) & (q + Rci_t[t][1] + hoeff >= fcdf_t[t]) for t in range(theta_grid.size)]
     )
-    if np.sum(indexes) < 2:
+    if np.sum(include_t) < 2:
         idx = np.argmin(
-            [np.minimum(q_diff[j] - Cthetas[j][1], Cthetas[j][0] - q_diff[j]) for j in range(theta_grid.size)])
+            [np.minimum((q + Rci_t[t][0] - hoeff) - fcdf_t[t], fcdf_t[t] - (q + Rci_t[t][1] + hoeff)) for t in range(theta_grid.size)]
+        )
         if idx == 0:
             ci_pp = np.array([theta_grid[0], theta_grid[1]])
         else:
             ci_pp = np.array([theta_grid[idx - 1], theta_grid[idx]])
     else:
-        ci_pp = theta_grid[np.where(indexes)[0]]
+        ci_pp = theta_grid[np.where(include_t)[0]]
         ci_pp = np.array([ci_pp.min(), ci_pp.max()])
 
     width_cl = ci_cl[1] - ci_cl[0]
