@@ -16,6 +16,12 @@ def binomial_iid(N,delta,muhat):
 def bentkus_iid(N, delta, muhat):
     return binomial_iid(N, delta/np.e, muhat)
 
+def clt_iid(x, delta):
+    n = x.shape[0]
+    sigmahat = x.std()
+    w = norm.ppf(1-delta/2) * sigmahat / np.sqrt(n)
+    return np.array([ x.mean() - w, x.mean() + w ])
+
 def wsr_iid_ana(x,delta,grid,num_cpus=10,step=1): # x is a [0,1] bounded sequence
     n = x.shape[0]
     muhats = (1/2 + np.cumsum(x))/(np.arange(n)+1)
@@ -78,7 +84,7 @@ def wsr_iid(x_n, delta, grid, num_cpus=10, parallelize: bool = False, intersecti
 """
 
 def linfty_dkw(N, K, delta):
-    return np.sqrt(2/N * np.log(2 / delta)) 
+    return np.sqrt(2/N * np.log(2 / delta))
 
 def linfty_binom(N, K, delta, qhat):
     epsilon = 0
@@ -95,7 +101,7 @@ def clt_swr(x,N,delta):
     point_estimate = x.mean()
     fluctuations = x.std()*norm.cdf(1-delta/2)*np.sqrt((N-n)/(N*n))
     return np.array([point_estimate-fluctuations, point_estimate+fluctuations])
-	
+
 def wsr_swr(x,N,delta,grid,num_cpus=10): # x is a [0,1] bounded sequence
     n = x.shape[0]
     def mu(m,i): return (N*m - np.concatenate([np.array([0,]), np.cumsum(x[:i-1])]))/(N - (np.arange(i)+1) + 1 )

@@ -1,4 +1,4 @@
-name: mai 
+name: ppi 
 channels:
     - anaconda
     - conda-forge
@@ -24,5 +24,7 @@ dependencies:
     - jupyter
     - xgboost
     - seaborn>=0.12.0
+    - geopandas
+    - geoplot
     - pip:
       - folktables
