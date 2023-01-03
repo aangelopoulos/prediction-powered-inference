@@ -28,8 +28,8 @@ def wsr_iid_ana(x,delta,grid,num_cpus=10,step=1): # x is a [0,1] bounded sequenc
     sigmahat2s = (1/4 + np.cumsum((x-muhats)**2))/(np.arange(n)+1)
     lambdas = np.concatenate([np.array([1,]), np.sqrt(2*np.log(2/delta)/(n*sigmahat2s))[:-1]]) # can't use last entry
     def M(m,i): return 1/2*np.maximum(
-        np.prod(1+np.minimum(lambdas[:i], 1/m)*(x[:i]-m)),
-        np.prod(1-np.minimum(lambdas[:i], 1/(1-m))*(x[:i]-m))
+        np.prod(1+np.minimum(lambdas[:i], 0.5/m)*(x[:i]-m)),
+        np.prod(1-np.minimum(lambdas[:i], 0.5/(1-m))*(x[:i]-m))
     )
     M = np.vectorize(M)
     M_list = Parallel(n_jobs=num_cpus)(delayed(M)(grid,i) for i in range(1,n+step,step))
@@ -102,18 +102,21 @@ def clt_swr(x,N,delta):
     fluctuations = x.std()*norm.cdf(1-delta/2)*np.sqrt((N-n)/(N*n))
     return np.array([point_estimate-fluctuations, point_estimate+fluctuations])
 
-def wsr_swr(x,N,delta,grid,num_cpus=10): # x is a [0,1] bounded sequence
+def wsr_swr(x,N,delta,grid,num_cpus=10, intersection=True): # x is a [0,1] bounded sequence
     n = x.shape[0]
     def mu(m,i): return (N*m - np.concatenate([np.array([0,]), np.cumsum(x[:i-1])]))/(N - (np.arange(i)+1) + 1 )
     muhats = (1/2 + np.cumsum(x))/(np.arange(n)+1)
     sigmahat2s = (1/4 + np.cumsum((x-muhats)**2))/(np.arange(n)+1)
     lambdas = np.concatenate([np.array([1,]), np.sqrt(2*np.log(2/delta)/(n*sigmahat2s))[:-1]]) # can't use last entry
     def M(m,i): return 1/2*np.maximum(
-        np.prod(1+np.minimum(lambdas[:i], 1/mu(m,i))*(x[:i]-mu(m,i))),
-        np.prod(1-np.minimum(lambdas[:i], 1/(1-mu(m,i)))*(x[:i]-mu(m,i)))
+        np.prod(1+np.minimum(lambdas[:i], 0.5/mu(m,i))*(x[:i]-mu(m,i))),
+        np.prod(1-np.minimum(lambdas[:i], 0.5/(1-mu(m,i)))*(x[:i]-mu(m,i)))
     )
     M = np.vectorize(M)
-    M_list = Parallel(n_jobs=num_cpus)(delayed(M)(grid,i) for i in range(1,n+1))
+    if intersection:
+        M_list = Parallel(n_jobs=num_cpus)(delayed(M)(grid,i) for i in range(1,n+1))
+    else:
+        M_list =[M(grid, n),]
     ci_full = grid[np.where(np.prod(np.stack(M_list, axis=1) < 1/delta , axis=1))[0]]
     return np.array([ci_full.min(), ci_full.max()]) # only output the interval
 
