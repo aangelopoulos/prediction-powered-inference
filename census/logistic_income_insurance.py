@@ -35,22 +35,6 @@ def get_data(year,features,outcome,filter=None,randperm=True):
         df_features, df_outcome = df_features.iloc[shuffler], df_outcome.iloc[shuffler]
     return df_features, df_outcome
 
-def logistic(X, XTy, lr=1):
-    betahat = np.array([0,0])
-    for epoch in range(1000):
-        p = expit(X@betahat) # This is equal to 1./(1. + np.exp(-X@betahat))
-        grad = X.T@p - XTy
-        betahat = betahat - lr*grad
-    return betahat
-
-def logistic_lbfgs(X, XTy, lr=1e-1):
-    betahat = np.array([0,0])
-    for epoch in range(10000):
-        p = 1./(1. + np.exp(-X@betahat))
-        grad = X.T@p - XTy
-        betahat = betahat - lr*grad
-    return betahat
-
 def train_eval_regressor(features, outcome, add_bias=True):
     X_train, X_test, y_train, y_test = train_test_split(features, outcome, test_size=0.1)
     dtrain = xgb.DMatrix(X_train.to_numpy(), label=y_train.to_numpy())
