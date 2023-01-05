@@ -82,33 +82,39 @@ def wsr_iid(x_n, alpha, grid, num_cpus=10, parallelize: bool = False, intersecti
     return np.array([ci_full.min(), ci_full.max()]) # only output the interval
 
 """
-    OLS algorithm
+    OLS algorithm with sandwich variance estimator
 """
 def ols(features, outcome):
     ols_coeffs = np.linalg.pinv(features).dot(outcome)
     return ols_coeffs
 
-def standard_ols_interval(X, Y, alpha):
+def standard_ols_interval(X, Y, alpha, return_halfwidth=False, sandwich=True):
     n = X.shape[0]
-    d = X.shape[1]
     thetahat = ols(X, Y)
-    s = np.sqrt(np.diag( np.linalg.inv(X.T@X) ))
-    stderr = s * np.sqrt( 1/(n-d) * ((Y - X@thetahat)**2).sum() )
+    Sigmainv = np.linalg.inv(1/n * X.T@X)
+    if sandwich:
+        M = 1/n * (X.T*((Y - X@thetahat)**2)[None,:])@X
+    else:
+        M = 1/n * ((Y - X@thetahat)**2).mean() * X.T@X
+    V = Sigmainv@M@Sigmainv
+    stderr = np.sqrt(np.diag(V))
     halfwidth = norm.ppf(1-alpha/2) * stderr/np.sqrt(n)
-    return thetahat - halfwidth, thetahat + halfwidth
+    if return_halfwidth:
+        return halfwidth
+    else:
+        #print(f"standard: {halfwidth}")
+        return thetahat - halfwidth, thetahat + halfwidth
 
-def pp_ols_interval(X_labeled, X_unlabeled, Y_labeled, Yhat_labeled, Yhat_unlabeled, alpha):
+def pp_ols_interval(X_labeled, X_unlabeled, Y_labeled, Yhat_labeled, Yhat_unlabeled, alpha, sandwich=True):
     n = X_labeled.shape[0]
     N = n + X_unlabeled.shape[0]
-    d = X_labeled.shape[1]
     thetatildef = ols(X_unlabeled, Yhat_unlabeled)
     rectifierhat = ols(X_labeled, Y_labeled - Yhat_labeled)
     pp_thetahat = thetatildef + rectifierhat
-    s_unlabeled = np.sqrt(np.diag( np.linalg.inv(X_unlabeled.T@X_unlabeled) ))
-    s_labeled = np.sqrt(np.diag( np.linalg.inv(X_labeled.T@X_labeled) ))
-    stderr_unlabeled = s_unlabeled * np.sqrt( 1/(N-d) * ((Yhat_unlabeled - X_unlabeled@thetatildef)**2).sum() )
-    stderr_labeled = s_labeled * np.sqrt( 1/(n-d) * ((Y_labeled - Yhat_labeled - X_labeled@rectifierhat)**2).sum() )
-    halfwidth = norm.ppf(1-0.99*alpha/2) * stderr_labeled/np.sqrt(n)   +   norm.ppf(1-0.01*alpha/2) * stderr_unlabeled/np.sqrt(N)
+    hw_tildef = standard_ols_interval(X_unlabeled, Yhat_unlabeled, 0.1*alpha, return_halfwidth=True, sandwich=sandwich)
+    hw_rectifier = standard_ols_interval(X_labeled, Y_labeled-Yhat_labeled, 0.9*alpha, return_halfwidth=True, sandwich=sandwich)
+    halfwidth = hw_tildef + hw_rectifier
+    #print(f"pp: {halfwidth}")
     return pp_thetahat - halfwidth, pp_thetahat + halfwidth
 
 """

@@ -50,9 +50,9 @@ def train_eval_regressor(features, outcome, add_bias=True):
     X_train, X_test, y_train, y_test = train_test_split(features, outcome, test_size=0.1)
     dtrain = xgb.DMatrix(X_train, label=y_train)
     dtest = xgb.DMatrix(X_test, label=y_test)
-    param = {'max_depth': 10, 'eta': 0.2, 'objective': 'reg:pseudohubererror', 'eval_metric': ['rmse','mae']}
+    param = {'max_depth': 50, 'eta': 0.2, 'objective': 'reg:pseudohubererror', 'eval_metric': ['mae']}
     evallist = [(dtest, 'eval'), (dtrain, 'train')]
-    num_round = 1000
+    num_round = 100000
     tree = xgb.train(param, dtrain, num_round, evallist)
     return tree
 
@@ -90,11 +90,11 @@ def trial(ols_features_2018, income_2018, predicted_income_2018, n, alpha):
 
     Yhat = np.concatenate([Yhat_labeled, Yhat_unlabeled], axis=0)
 
-    naive_interval = standard_ols_interval(X, Yhat, alpha)
+    naive_interval = standard_ols_interval(X, Yhat, alpha, sandwich=False)
 
-    classical_interval = standard_ols_interval(X_labeled, Y_labeled, alpha)
+    classical_interval = standard_ols_interval(X_labeled, Y_labeled, alpha, sandwich=False)
 
-    pp_interval = pp_ols_interval(X_labeled, X_unlabeled, Y_labeled, Yhat_labeled, Yhat_unlabeled, alpha)
+    pp_interval = pp_ols_interval(X_labeled, X_unlabeled, Y_labeled, Yhat_labeled, Yhat_unlabeled, alpha, sandwich=False)
 
     return naive_interval, classical_interval, pp_interval
 
@@ -117,9 +117,9 @@ def make_plots(df, true):
     plt.tight_layout()
     plt.savefig('./ols-plots/width-lineplot.pdf')
 
-    make_histograms(df[df["n"] == ns.max()])
+    make_histograms(df[df["n"] == ns.min()])
 
-    make_intervals(df[df["n"] == ns.max()], true)
+    make_intervals(df[df["n"] == ns.min()], true)
 
 def make_intervals(df, true):
     ci_naive = df[(df["coefficient"] == "age") & (df["estimator"] == "naive")]
@@ -192,10 +192,10 @@ def make_histograms(df):
     axs[1].legend(["classical", "prediction-powered"], bbox_to_anchor = (1.,1.2) )
     plt.savefig('./ols-plots/width.pdf')
 
-    cvg_classical_age = (df[(df["estimator"]=="classical") & (df["coefficient"]=="age")]["covered"]).mean()
-    cvg_classical_sex = (df[(df["estimator"]=="classical") & (df["coefficient"]=="sex")]["covered"]).mean()
-    cvg_predictionpowered_age = (df[(df["estimator"]=="prediction-powered") & (df["coefficient"]=="age")]["covered"]).mean()
-    cvg_predictionpowered_sex = (df[(df["estimator"]=="prediction-powered") & (df["coefficient"]=="sex")]["covered"]).mean()
+    cvg_classical_age = (df[(df["estimator"]=="classical") & (df["coefficient"]=="age")]["covered"]).astype(int).mean()
+    cvg_classical_sex = (df[(df["estimator"]=="classical") & (df["coefficient"]=="sex")]["covered"]).astype(int).mean()
+    cvg_predictionpowered_age = (df[(df["estimator"]=="prediction-powered") & (df["coefficient"]=="age")]["covered"]).astype(int).mean()
+    cvg_predictionpowered_sex = (df[(df["estimator"]=="prediction-powered") & (df["coefficient"]=="sex")]["covered"]).astype(int).mean()
 
     print(f"Classical coverage ({cvg_classical_age},{cvg_classical_sex}), prediction-powered ({cvg_predictionpowered_age},{cvg_predictionpowered_sex})")
 
@@ -226,9 +226,9 @@ if __name__ == "__main__":
         # Collect OLS features and do MAI
         print(f"True OLS coefficients: {true}")
         N = ols_features_2018.shape[0]
-        num_n = 100
+        num_n = 20
         ns = np.linspace(2000, 5000, num_n).astype(int)
-        num_trials = 100
+        num_trials = 10
         alpha = 0.05
 
         # Store results
@@ -240,12 +240,12 @@ if __name__ == "__main__":
                 n = ns[j]
                 ii, ci, ppi = trial(ols_features_2018, income_2018, predicted_income_2018, n, alpha)
                 temp_df = pd.DataFrame(np.zeros((6,len(columns))), columns=columns)
-                temp_df.loc[0] = ii[0][0], ii[1][0], ii[0][0] <= true[0] <= ii[1][0], "naive", "age", n
-                temp_df.loc[1] = ci[0][0], ci[1][0], ci[0][0] <= true[0] <= ci[1][0], "classical", "age", n
-                temp_df.loc[2] = ppi[0][0], ppi[1][0], ppi[0][0] <= true[0] <= ppi[1][0], "prediction-powered", "age", n
-                temp_df.loc[3] = ii[0][1], ii[1][1], ii[0][1] <= true[1] <= ii[1][1], "naive", "sex", n
-                temp_df.loc[4] = ci[0][1], ci[1][1], ci[0][1] <= true[1] <= ci[1][1], "classical", "sex", n
-                temp_df.loc[5] = ppi[0][1], ppi[1][1], ppi[0][1] <= true[1] <= ppi[1][1], "prediction-powered", "sex", n
+                temp_df.loc[0] = ii[0][0], ii[1][0], (ii[0][0] <= true[0]) & (true[0] <= ii[1][0]), "naive", "age", n
+                temp_df.loc[1] = ci[0][0], ci[1][0], (ci[0][0] <= true[0]) & (true[0] <= ci[1][0]), "classical", "age", n
+                temp_df.loc[2] = ppi[0][0], ppi[1][0], (ppi[0][0] <= true[0]) & (true[0] <= ppi[1][0]), "prediction-powered", "age", n
+                temp_df.loc[3] = ii[0][1], ii[1][1], (ii[0][1] <= true[1]) & (true[1] <= ii[1][1]), "naive", "sex", n
+                temp_df.loc[4] = ci[0][1], ci[1][1], (ci[0][1] <= true[1]) & (true[1] <= ci[1][1]), "classical", "sex", n
+                temp_df.loc[5] = ppi[0][1], ppi[1][1], (ppi[0][1] <= true[1]) & (true[1] <= ppi[1][1]), "prediction-powered", "sex", n
                 results += [temp_df]
         df = pd.concat(results)
         df["width"] = df["ub"] - df["lb"]
