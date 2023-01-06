@@ -89,7 +89,7 @@ def train_eval_regressor(features, outcome, add_bias=True):
 
 def plot_data(age,income,sex):
     plt.figure(figsize=(7.5,2.5))
-    sns.set_theme(style="white", palette="pastel")
+    sns.set_theme(style="white", palette="pastel", font_scale=1.5)
     ageranges = np.digitize(age, bins=[0,20,30,40,50])
     sex = np.array(['female' if s==2 else 'male' for s in sex])
     sns.boxplot(x=ageranges, y=income, hue=sex, showfliers=False)
@@ -131,45 +131,48 @@ def trial(ols_features_2018, income_2018, predicted_income_2018, n, alpha):
 def make_plots(df, true):
     # Line plots
     ns = np.sort(np.unique(df["n"]))
-    plot_data = df[["coefficient", "estimator","width", "n"]].groupby(["coefficient", "estimator","n"], group_keys=False).mean()["width"].reset_index()
 
-    fig, axs = plt.subplots(ncols=2, figsize=(7.5, 2.5))
-    my_palette = sns.color_palette(["#71D26F","#BFB9B9"], 2)
-    sns.set_theme(style="white", palette=my_palette, font_scale=1.3)
-    lplt = sns.lineplot(data=plot_data[(plot_data["coefficient"] == "age") & (plot_data["estimator"] != "naive")], x="n", y="width", hue="estimator", ax=axs[0], hue_order=["prediction-powered", "classical"])
-    axs[0].set_ylabel("mean width ($/yr)", fontsize=16)
-    axs[0].set_xlabel("n", fontsize=16)
-    axs[0].xaxis.set_tick_params(labelsize=14)
-    axs[0].yaxis.set_tick_params(labelsize=14)
+    fig, axs = plt.subplots(nrows=3, ncols=2, figsize=(10, 5))
+    my_palette = sns.color_palette(["#71D26F","#BFB9B9","#D0A869"], 3)
+    sns.set_theme(style="white", palette=my_palette, font_scale=1)
+
+    make_intervals(df[df["n"] == ns.min()], true, axs[0,:])
+
+    make_histograms(df[df["n"] == ns.min()], axs[1,:])
+
+    make_lineplots(df, axs[2,:])
+
+    plt.tight_layout()
+    plt.savefig('./ols-plots/results.pdf')
+
+def make_lineplots(df, axs):
+    plot_df = df[["coefficient", "estimator","width", "n"]].groupby(["coefficient", "estimator","n"], group_keys=False).mean()["width"].reset_index()
+    lplt = sns.lineplot(data=plot_df[(plot_df["coefficient"] == "age") & (plot_df["estimator"] != "naive")], x="n", y="width", hue="estimator", ax=axs[0], hue_order=["prediction-powered", "classical"])
+    axs[0].set_ylabel("mean width ($/yr)")
+    axs[0].set_xlabel("n")
+    axs[0].xaxis.set_tick_params()
+    axs[0].yaxis.set_tick_params()
     sns.despine(ax=axs[0],top=True,right=True)
     lplt.get_legend().remove()
-    lplt = sns.lineplot(data=plot_data[(plot_data["coefficient"] == "sex") & (plot_data["estimator"] != "naive")], x="n", y="width", hue="estimator", ax=axs[1], hue_order=["prediction-powered", "classical"])
-    axs[1].set_ylabel("mean width ($)", fontsize=16)
-    axs[1].set_xlabel("n", fontsize=16)
-    axs[1].xaxis.set_tick_params(labelsize=14)
-    axs[1].yaxis.set_tick_params(labelsize=14)
+    lplt = sns.lineplot(data=plot_df[(plot_df["coefficient"] == "sex") & (plot_df["estimator"] != "naive")], x="n", y="width", hue="estimator", ax=axs[1], hue_order=["prediction-powered", "classical"])
+    axs[1].set_ylabel("mean width ($)")
+    axs[1].set_xlabel("n")
+    axs[1].xaxis.set_tick_params()
+    axs[1].yaxis.set_tick_params()
     sns.despine(ax=axs[1],top=True,right=True)
-    lplt.get_legend().set_title(None)
-    lplt.get_legend().set_bbox_to_anchor((1,1))
-    plt.tight_layout()
-    plt.savefig('./ols-plots/width-lineplot.pdf')
+    lplt.get_legend().remove()
 
-    make_histograms(df[df["n"] == ns.min()])
-
-    make_intervals(df[df["n"] == ns.min()], true)
-
-def make_intervals(df, true):
+def make_intervals(df, true, axs):
     ci_naive = df[(df["coefficient"] == "age") & (df["estimator"] == "naive")]
     ci_naive = [ci_naive["lb"].mean(), ci_naive["ub"].mean()]
     ci_classical = df[(df["coefficient"] == "age") & (df["estimator"] == "classical")]
     ci_classical = [ci_classical["lb"].mean(), ci_classical["ub"].mean()]
     ci = df[(df["coefficient"] == "age") & (df["estimator"] == "prediction-powered")]
     ci = [ci["lb"].mean(), ci["ub"].mean()]
-    my_palette = sns.color_palette(["#71D26F","#BFB9B9","#D0A869"], 3)
-    fig, axs = plt.subplots(nrows=1, ncols=2, figsize=(7.5,2))
+
     axs[0].plot([ci[0], ci[1]],[0.8,0.8], linewidth=10, color="#DAF3DA", path_effects=[pe.Stroke(linewidth=11, foreground="#71D26F"), pe.Normal()], label='prediction-powered')
     axs[0].plot([ci_classical[0], ci_classical[1]],[0.5, 0.5], linewidth=10, color="#EEEDED", path_effects=[pe.Stroke(linewidth=11, foreground="#BFB9B9"), pe.Normal()],  label='no ML')
-    axs[0].plot([ci_naive[0], ci_naive[1]],[0.3, 0.3], linewidth=10, color="#FFEACC", path_effects=[pe.Stroke(linewidth=11, foreground="#FFCD82"), pe.Normal()],  label='naive ML')
+    axs[0].plot([ci_naive[0], ci_naive[1]],[0.2, 0.2], linewidth=10, color="#FFEACC", path_effects=[pe.Stroke(linewidth=11, foreground="#FFCD82"), pe.Normal()],  label='naive ML')
     axs[0].vlines(true[0], ymin=0.0, ymax=1, linestyle="dotted", linewidth=3, label="ground truth", color="#F7AE7C")
     axs[0].set_xlabel("age coeff")
     axs[0].set_yticks([])
@@ -188,26 +191,20 @@ def make_intervals(df, true):
     ci = [ci["lb"].mean(), ci["ub"].mean()]
     axs[1].plot([ci[0], ci[1]],[0.8,0.8], linewidth=10, color="#DAF3DA", path_effects=[pe.Stroke(linewidth=11, foreground="#71D26F"), pe.Normal()], label='prediction-powered')
     axs[1].plot([ci_classical[0], ci_classical[1]],[0.5, 0.5], linewidth=10, color="#EEEDED", path_effects=[pe.Stroke(linewidth=11, foreground="#BFB9B9"), pe.Normal()],  label='no ML')
-    axs[1].plot([ci_naive[0], ci_naive[1]],[0.3, 0.3], linewidth=10, color="#FFEACC", path_effects=[pe.Stroke(linewidth=11, foreground="#FFCD82"), pe.Normal()],  label='naive ML')
+    axs[1].plot([ci_naive[0], ci_naive[1]],[0.2, 0.2], linewidth=10, color="#FFEACC", path_effects=[pe.Stroke(linewidth=11, foreground="#FFCD82"), pe.Normal()],  label='naive ML')
     axs[1].vlines(true[1], ymin=0.0, ymax=1, linestyle="dotted", linewidth=3, label="ground truth", color="#F7AE7C")
-    axs[1].legend(bbox_to_anchor=(1.1,1), borderpad=1)
     axs[1].set_xlabel("sex coeff")
     axs[1].set_yticks([])
     axs[1].set_yticklabels([])
+    axs[1].legend(bbox_to_anchor = (1,1), borderpad=1)
     axs[1].xaxis.set_tick_params()
+    axs[1].locator_params(axis='x', nbins=4)
     axs[1].set_ylim([0,1])
     axs[1].set_xlim([None, None])
     sns.despine(ax=axs[1],top=True,right=True,left=True)
 
-    plt.savefig('./ols-plots/intervals.pdf', bbox_inches='tight')
-
-
-def make_histograms(df):
-    my_palette = sns.color_palette(["#71D26F","#BFB9B9"], 2)
-
+def make_histograms(df, axs):
     # Width figure
-    fig, axs = plt.subplots(ncols=2, figsize=(7.5, 2.5))
-    sns.set_theme(style="white", palette=my_palette, font_scale=1.3)
     kde0 = sns.kdeplot(df[(df["coefficient"]=="age") & (df["estimator"] != "naive")], ax=axs[0], x="width", hue="estimator", hue_order=["prediction-powered", "classical"], fill=True, clip=(0,None), cut=0)
     axs[0].set_ylabel("")
     axs[0].set_xlabel("width (age coeff, $/yr)")
@@ -216,16 +213,14 @@ def make_histograms(df):
     kde0.get_legend().remove()
     sns.despine(ax=axs[0],top=True,right=True,left=True)
 
-    sns.kdeplot(df[(df["coefficient"]=="age") & (df["estimator"] != "naive")], ax=axs[1], x="width", hue="estimator", hue_order=["prediction-powered", "classical"], fill=True, clip=(0,None), cut=0)
+    kde1 = sns.kdeplot(df[(df["coefficient"]=="age") & (df["estimator"] != "naive")], ax=axs[1], x="width", hue="estimator", hue_order=["prediction-powered", "classical"], fill=True, clip=(0,None), cut=0)
     axs[1].set_ylabel("")
     axs[1].set_xlabel("width (sex coeff, $)")
     axs[1].set_yticks([])
     axs[1].set_yticklabels([])
+    kde1.get_legend().remove()
     sns.despine(ax=axs[1],top=True,right=True,left=True)
-    fig.suptitle("") # This is here for spacing
-    plt.tight_layout()
-    axs[1].legend(["classical", "prediction-powered"], bbox_to_anchor = (1.,1.2) )
-    plt.savefig('./ols-plots/width.pdf')
+    #plt.tight_layout()
 
     cvg_classical_age = (df[(df["estimator"]=="classical") & (df["coefficient"]=="age")]["covered"]).astype(int).mean()
     cvg_classical_sex = (df[(df["estimator"]=="classical") & (df["coefficient"]=="sex")]["covered"]).astype(int).mean()
