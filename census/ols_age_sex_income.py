@@ -15,6 +15,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 import xgboost as xgb
+from hyperopt import STATUS_OK, Trials, fmin, hp, tpe
 from tqdm import tqdm
 
 from concentration import ols, standard_ols_interval, pp_ols_interval
@@ -47,13 +48,42 @@ def get_data(year,features,outcome, randperm=True):
     return income_features, income, employed
 
 def train_eval_regressor(features, outcome, add_bias=True):
-    X_train, X_test, y_train, y_test = train_test_split(features, outcome, test_size=0.1)
+    X_train, X_test, y_train, y_test = train_test_split(features, outcome, test_size=0.2)
     dtrain = xgb.DMatrix(X_train, label=y_train)
     dtest = xgb.DMatrix(X_test, label=y_test)
-    param = {'max_depth': 50, 'eta': 0.2, 'objective': 'reg:pseudohubererror', 'eval_metric': ['mae']}
+    num_round = 1000
+
+    lossfns = ['reg:squarederror', 'reg:pseudohubererror']
+
+    # TODO: Fix this
+    space={
+           'max_depth': hp.choice('max_depth', np.arange(3, 30+1, dtype=int)),
+           'eta': hp.uniform('eta', 0, 1),
+           'objective': hp.choice('objective', lossfns)
+          }
+
     evallist = [(dtest, 'eval'), (dtrain, 'train')]
-    num_round = 100000
-    tree = xgb.train(param, dtrain, num_round, evallist)
+
+    def objective(params):
+        tree = xgb.train(params, dtrain, num_round, evallist)
+        print(params)
+
+        pred = tree.predict(dtest)
+        std = np.std(y_test - pred)
+        return {'loss': std, 'status': STATUS_OK }
+
+    trials = Trials()
+
+    #best_hyperparams = fmin(fn = objective,
+    #                        space = space,
+    #                        algo = tpe.suggest,
+    #                        max_evals = 100,
+    #                        trials = trials)
+
+    #print(best_hyperparams)
+    #best_hyperparams['objective'] = lossfns[best_hyperparams['objective']]
+    #tree = xgb.train(best_hyperparams, dtrain, num_round, evallist)
+    tree = xgb.train({'eta': 0.8, 'max_depth': 30, 'objective': 'reg:pseudohubererror'}, dtrain, 10000, evallist)
     return tree
 
 
@@ -132,9 +162,8 @@ def make_intervals(df, true):
     fig, axs = plt.subplots(nrows=1, ncols=2, figsize=(7.5,2))
     axs[0].plot([ci[0], ci[1]],[0.8,0.8], linewidth=3, color="#71D26F", label='prediction-powered')
     axs[0].plot([ci_classical[0], ci_classical[1]],[0.5, 0.5], linewidth=3, color="#BFB9B9", label='classical')
-    axs[0].plot([ci_naive[0], ci_naive[1]],[0.3, 0.3], linewidth=3, color="#FFE0B2", label='naive')
+    axs[0].plot([ci_naive[0], ci_naive[1]],[0.3, 0.3], linewidth=3, color="#FFCD82", label='naive')
     axs[0].vlines(true[0], ymin=0.0, ymax=1, linestyle="dotted", linewidth=3, label="ground truth", color="#F7AE7C")
-    axs[0].legend()
     axs[0].set_xlabel("age coefficient")
     axs[0].set_yticks([])
     axs[0].set_yticklabels([])
@@ -152,7 +181,7 @@ def make_intervals(df, true):
     ci = [ci["lb"].mean(), ci["ub"].mean()]
     axs[1].plot([ci[0], ci[1]],[0.8,0.8], linewidth=3, color="#71D26F", label='prediction-powered')
     axs[1].plot([ci_classical[0], ci_classical[1]],[0.5, 0.5], linewidth=3, color="#BFB9B9", label='classical')
-    axs[1].plot([ci_naive[0], ci_naive[1]],[0.3, 0.3], linewidth=3, color="#FFE0B2", label='naive')
+    axs[1].plot([ci_naive[0], ci_naive[1]],[0.3, 0.3], linewidth=3, color="#FFCD82", label='naive')
     axs[1].vlines(true[0], ymin=0.0, ymax=1, linestyle="dotted", linewidth=3, label="ground truth", color="#F7AE7C")
     axs[1].legend()
     axs[1].set_xlabel("sex coefficient")
@@ -173,7 +202,7 @@ def make_histograms(df):
     # Width figure
     fig, axs = plt.subplots(ncols=2, figsize=(7.5, 2.5))
     sns.set_theme(style="white", palette=my_palette)
-    kde0 = sns.kdeplot(df[(df["coefficient"]=="age") & (df["estimator"] != "naive")], ax=axs[0], x="width", hue="estimator", hue_order=["prediction-powered", "classical"], fill=True, clip=(0,None))
+    kde0 = sns.kdeplot(df[(df["coefficient"]=="age") & (df["estimator"] != "naive")], ax=axs[0], x="width", hue="estimator", hue_order=["prediction-powered", "classical"], fill=True, clip=(0,None), cut=0)
     axs[0].set_ylabel("")
     axs[0].set_xlabel("width (age coefficient, $/yr of age)")
     axs[0].set_yticks([])
@@ -181,7 +210,7 @@ def make_histograms(df):
     kde0.get_legend().remove()
     sns.despine(ax=axs[0],top=True,right=True,left=True)
 
-    sns.kdeplot(df[(df["coefficient"]=="age") & (df["estimator"] != "naive")], ax=axs[1], x="width", hue="estimator", hue_order=["prediction-powered", "classical"], fill=True, clip=(0,None))
+    sns.kdeplot(df[(df["coefficient"]=="age") & (df["estimator"] != "naive")], ax=axs[1], x="width", hue="estimator", hue_order=["prediction-powered", "classical"], fill=True, clip=(0,None), cut=0)
     axs[1].set_ylabel("")
     axs[1].set_xlabel("width (sex coefficient, $)")
     axs[1].set_yticks([])
@@ -226,9 +255,9 @@ if __name__ == "__main__":
         # Collect OLS features and do MAI
         print(f"True OLS coefficients: {true}")
         N = ols_features_2018.shape[0]
-        num_n = 20
+        num_n = 50
         ns = np.linspace(2000, 5000, num_n).astype(int)
-        num_trials = 10
+        num_trials = 100
         alpha = 0.05
 
         # Store results

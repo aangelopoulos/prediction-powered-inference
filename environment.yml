@@ -26,6 +26,7 @@ dependencies:
     - seaborn>=0.12.0
     - geopandas
     - geoplot
+    - hyperopt
     - pip:
       - folktables
       - alphashape
