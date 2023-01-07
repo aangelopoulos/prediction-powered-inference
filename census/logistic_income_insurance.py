@@ -1,4 +1,6 @@
 import os
+import sys
+sys.path.insert(1, '../')
 import numpy as np
 import torch
 import folktables
@@ -9,13 +11,14 @@ import pandas as pd
 
 from scipy.stats import norm
 from scipy.optimize import brentq
-from scipy.special import expit
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 import xgboost as xgb
 from tqdm import tqdm
+
+from concentration import logistic, standard_logistic_interval, pp_logistic_interval
 
 def filter(df):
     df.fillna(-1)
@@ -47,7 +50,7 @@ def train_eval_regressor(features, outcome, add_bias=True):
 
 def plot_data(pincp, privcov):
     plt.figure(figsize=(7.5,2.5))
-    sns.set_theme(style="white", palette="pastel")
+    sns.set_theme(style="white", palette="pastel", font_scale=1.25)
     bins = [20000,40000,60000,80000,100000]
     incomeranges = np.digitize(pincp, bins=bins)
     avgs = [privcov[incomeranges == i].mean() for i in range(len(bins)+1)]
@@ -57,8 +60,56 @@ def plot_data(pincp, privcov):
     plt.gca().set_ylim([0,1])
     plt.xlabel('household income ($)')
     sns.despine(top=True, right=True)
-    plt.tight_layout()
+    plt.subplots_adjust(top=0.95, bottom=0.05)
     plt.savefig("./logistic-plots/raw_data.pdf")
+
+def trial(X, Y, Yhat, true, n, alpha):
+    X_labeled, X_unlabeled, Y_labeled, Y_unlabeled, Yhat_labeled, Yhat_unlabeled = train_test_split(X, Y, Yhat, train_size=n)
+
+    naive_interval = standard_logistic_interval(X, Yhat, alpha)
+
+    classical_interval = standard_logistic_interval(X_labeled, Y_labeled, alpha)
+
+    pp_interval = pp_logistic_interval(X_labeled, X_unlabeled, Y_labeled, Yhat_labeled, Yhat_unlabeled, alpha)
+
+    return naive_interval, classical_interval, pp_interval
+
+def make_plots(df, true):
+    # Line plots
+    ns = np.sort(np.unique(df["n"]))
+
+    fig, axs = plt.subplots(nrows=3, ncols=2, figsize=(10, 5))
+    my_palette = sns.color_palette(["#71D26F","#BFB9B9","#D0A869"], 3)
+    sns.set_theme(style="white", palette=my_palette, font_scale=1)
+
+    make_intervals(df[df["n"] == ns.min()], true, axs[0,:])
+
+    make_histograms(df[df["n"] == ns.min()], axs[1,:])
+
+    make_lineplots(df, axs[2,:])
+
+    plt.tight_layout()
+    plt.savefig('./ols-plots/results.pdf')
+
+def make_lineplots(df, axs):
+    plot_df = df[["coefficient", "estimator","width", "n"]].groupby(["coefficient", "estimator","n"], group_keys=False).mean()["width"].reset_index()
+    lplt = sns.lineplot(data=plot_df[(plot_df["coefficient"] == "age") & (plot_df["estimator"] != "naive")], x="n", y="width", hue="estimator", ax=axs[0], hue_order=["prediction-powered", "classical"])
+    axs[0].set_ylabel("mean width ($/yr)")
+    axs[0].set_xlabel("n")
+    axs[0].xaxis.set_tick_params()
+    axs[0].yaxis.set_tick_params()
+    sns.despine(ax=axs[0],top=True,right=True)
+    lplt.get_legend().remove()
+    lplt = sns.lineplot(data=plot_df[(plot_df["coefficient"] == "sex") & (plot_df["estimator"] != "naive")], x="n", y="width", hue="estimator", ax=axs[1], hue_order=["prediction-powered", "classical"])
+    axs[1].set_ylabel("mean width ($)")
+    axs[1].set_xlabel("n")
+    axs[1].xaxis.set_tick_params()
+    axs[1].yaxis.set_tick_params()
+    sns.despine(ax=axs[1],top=True,right=True)
+    lplt.get_legend().remove()
+
+def make_intervals(df, true, axs):
+    ci_naive = df[(df["coefficient"] == "age") & (df["estimator"] == "naive")]
 
 def get_tree(year=2017):
     try:
@@ -71,71 +122,6 @@ def get_tree(year=2017):
         tree.save_model(f"./.cache/logistic-model{year}.json")
     return tree
 
-def trial(X, privcov_2018, predicted_privcov_2018, coeff_true, N, n, delta):
-    X_labeled, X_unlabeled, Y_labeled, Y_unlabeled, Yhat_labeled, Yhat_unlabeled = train_test_split(X, privcov_2018, predicted_privcov_2018, train_size=n)
-
-    X = np.concatenate([X_labeled, X_unlabeled], axis=0)
-
-    d = X.shape[1]
-
-    imputed_estimate = logistic(X,X.T@np.concatenate([Y_labeled, Yhat_unlabeled], axis=0))
-
-    classical_estimate = logistic(X, N/n * X_labeled.T@Y_labeled)
-
-    classical_sigmahat = np.std(X_labeled.T*Y_labeled[None,:], axis=1)
-
-    classical_fluctuations = classical_sigmahat * norm.ppf(1-delta/2/d) * np.sqrt(N*(N-n)/n)
-
-    classical_grid = np.linspace(N/n * X_labeled.T@Y_labeled-classical_fluctuations,N/n * X_labeled.T@Y_labeled+classical_fluctuations, 2)
-
-    predictionpowered_XTy = X.T@np.concatenate([Yhat_labeled, Yhat_unlabeled], axis=0)
-
-    predictionpowered_estimate = logistic(X, predictionpowered_XTy)
-
-    predictionpowered_sigmahat = np.std(X_labeled.T*(Y_labeled[None,:]-Yhat_labeled[None,:]), axis=1)
-
-    fluctuations = predictionpowered_sigmahat * norm.ppf(1-delta/2/d) * np.sqrt(N*(N-n)/n)
-
-    predictionpowered_grid = np.linspace(predictionpowered_XTy-fluctuations, predictionpowered_XTy+fluctuations, 2)
-
-    # Interval construction
-    classical_outputs = [logistic(X, xty)[0] for xty in classical_grid]
-    classical_interval = [min(classical_outputs), max(classical_outputs)]
-
-    predictionpowered_outputs = [logistic(X, xty)[0] for xty in predictionpowered_grid]
-    predictionpowered_interval = [min(predictionpowered_outputs), max(predictionpowered_outputs)]
-
-    imputed_error = imputed_estimate[0] - coeff_true[0]
-    classical_error = classical_estimate[0] - coeff_true[0]
-
-    classical_width = classical_interval[1]-classical_interval[0]
-    predictionpowered_width = predictionpowered_interval[1] - predictionpowered_interval[0]
-
-    classical_covered = (coeff_true[0] >= classical_interval[0]) & (coeff_true[0] <= classical_interval[1])
-    predictionpowered_covered = (coeff_true[0] >= predictionpowered_interval[0]) & (coeff_true[0] <= predictionpowered_interval[1])
-
-    return imputed_error, classical_error, classical_width, predictionpowered_width, classical_covered, predictionpowered_covered, classical_sigmahat[0], predictionpowered_sigmahat[0]
-
-def make_histograms(df):
-    # Width figure
-    plt.figure(figsize=(5.5, 2.5))
-    my_palette = sns.color_palette(["#71D26F","#BFB9B9"], 2)
-    sns.set_theme(style="white", palette=my_palette)
-    kde = sns.kdeplot(df[df["estimator"] != "imputed"], x="width", hue="estimator", fill=True, clip=(0,None), hue_order=["prediction-powered","classical"])
-    plt.ylabel("")
-    plt.xlabel("width")
-    plt.gca().set_yticks([])
-    plt.gca().set_yticklabels([])
-    kde.legend_.set_title(None)
-    sns.despine(top=True,right=True,left=True)
-    plt.gca().legend(loc="best", labels=["classical", "prediction-powered"])
-    plt.tight_layout()
-    plt.savefig('./logistic-plots/width.pdf', bbox_inches="tight")
-
-    cvg_classical = (df[df["estimator"]=="classical"]["covered"]).mean()
-    cvg_predictionpowered = (df[df["estimator"]=="prediction-powered"]["covered"]).mean()
-
-    print(f"Classical coverage {cvg_classical}, prediction-powered coverage {cvg_predictionpowered}")
 
 if __name__ == "__main__":
     os.makedirs('./logistic-plots', exist_ok=True)
@@ -158,25 +144,30 @@ if __name__ == "__main__":
         col_norms = np.linalg.norm(X,axis=0)
         X = X / col_norms[None,:]
         XTy = X.T@privcov_2018
-        coeff_true = logistic(X, XTy)
+        true = logistic(X, XTy)
 
-        print(f"True logistic regression coefficients: {coeff_true/col_norms}")
+        print(f"True logistic regression coefficients: {true/col_norms}")
         N = features_2018.shape[0]
-        n = 10000
-        num_trials = 100
-        delta = 0.05
+        num_n = 50
+        ns = np.linspace(1000, 10000, num_n).astype(int)
+        num_trials = 1
+        alpha = 0.05
 
         # Store results
-        columns = ["error","width","covered", r'$\sigma$', "estimator"]
-        df = pd.DataFrame(np.zeros((num_trials*5,len(columns))), columns=columns)
+        columns = ["lb","ub","covered","estimator","n"]
 
+        results = []
         for i in tqdm(range(num_trials)):
-            imputed_error, classical_error, classical_width, predictionpowered_width, classical_covered, predictionpowered_covered, classical_sigma, predictionpowered_sigma = trial(X, privcov_2018.to_numpy(), predicted_privcov_2018, coeff_true, N, n, delta)
-            print(imputed_error, classical_error, classical_width, predictionpowered_width, classical_covered, predictionpowered_covered, classical_sigma, predictionpowered_sigma)
-            df.loc[i] = imputed_error/col_norms[0], -1, 0, 0, "imputed"
-            df.loc[i+num_trials] = imputed_error/col_norms[0], -1, 0, 0, "imputed"
-            df.loc[i+2*num_trials] = classical_error/col_norms[0], classical_width/col_norms[0], int(classical_covered), classical_sigma/col_norms[0], "classical"
-            df.loc[i+3*num_trials] = classical_error/col_norms[0], classical_width/col_norms[0], int(classical_covered), classical_sigma/col_norms[0], "classical"
-            df.loc[i+4*num_trials] = -1, predictionpowered_width/col_norms[0], int(predictionpowered_covered), predictionpowered_sigma/col_norms[0], "prediction-powered"
+            for j in range(ns.shape[0]):
+                n = ns[j]
+                ii, ci, ppi = trial(X, privcov_2018.to_numpy(), predicted_privcov_2018, true, n, alpha)
+                temp_df = pd.DataFrame(np.zeros((3,len(columns))), columns=columns)
+                temp_df.loc[0] = ii[0], ii[1], (ii[0] <= true) & (true[0] <= ii[1]), "naive", n
+                temp_df.loc[1] = ci[0][0], ci[1][0], (ci[0][0] <= true[0]) & (true[0] <= ci[1][0]), "classical", n
+                temp_df.loc[2] = ppi[0][0], ppi[1][0], (ppi[0][0] <= true[0]) & (true[0] <= ppi[1][0]), "prediction-powered", n
+                results += [temp_df]
+        df = pd.concat(results)
+        df["width"] = df["ub"] - df["lb"]
         df.to_pickle('./.cache/logistic-results.pkl')
+
     make_histograms(df)
