@@ -127,54 +127,64 @@ def get_betting_wor_ci(x_n, N, alpha, grid_spacing, use_intersection: bool = Tru
 
 
 # odds ratio estimation based on finite sample mean estimation
-def get_odds_ratio_betting_ci(df, ptm_name, lab_idx, alpha, grid_spacing: float = 1e-3,
-                              use_intersection: bool = True, verbose: bool = True,
-                              parallelize: bool = False, n_cores: int = None):
+def get_odds_ratio_cis(df, ptm_name, n, alpha, grid_spacing: float = 1e-3,
+                       use_intersection: bool = True, verbose: bool = True,
+                       parallelize: bool = False, n_cores: int = None, n_min: int = 20):
 
     # Z: df[ptm_name]
-    # Y: df['disordered']
-    # f: df['pred_disordered']
+    # Y: df['disordered'], binary
+    # f: df['pred_disordered'], in [0, 1]
 
-    lab_df = df.iloc[lab_idx]  # labeled data
-    N = len(df)                # total data
-    n = len(lab_df)            # labeled data
-    if verbose:
-        print('N (total) = {}, n (labeled) = {}'.format(N, n))
+    # ===== partition n labels into Z = 1 and Z = 0 =====
 
-    # ===== CIs on mu1 = P(Y = 1 | Z = 1) and mu0 = P(Y = 1 | Z = 0) =====
-
-    # ----- true quantities
     z1_df = df.loc[df[ptm_name] == 1]
     z0_df = df.loc[df[ptm_name] == 0]
-    mu1 = z1_df['disordered'].mean()
-    mu0 = z0_df['disordered'].mean()
+    N_z1 = len(z1_df)
+    N_z0 = len(z0_df)
+    assert(N_z1 + N_z0 == len(df))
+
+    n_z1 = int(N_z1 * n / len(df))
+    n_z0 = n - n_z1
+    n_min = np.min([n_min, N_z1, N_z0])
+    if n_z1 < n_min:
+        n_z1 = n_min
+        n_z0 = n - n_min
+    elif n_z0 < n_min:
+        n_z0 = n_min
+        n_z1 = n - n_min
+    assert(n_z0 >= n_min)
+    assert(n_z1 >= n_min)
+    assert(n_z1 + n_z0 == n)
+    if verbose:
+        print('For Z1: N = {}, n = {}, fraction = {:.3f}'.format(N_z1, n_z1, n_z1 / N_z1))
+        print('For Z0: N = {}, n = {}, fraction = {:.3f}'.format(N_z0, n_z0, n_z0 / N_z0))
+
+    z1_lab_idx = np.random.choice(N_z1, n_z1, replace=False)
+    lab_z1_df = z1_df.iloc[z1_lab_idx]
+    z0_lab_idx = np.random.choice(N_z0, n_z0, replace=False)
+    lab_z0_df = z0_df.iloc[z0_lab_idx]
+
+    # ===== CIs on mu1 = P(Y = 1 | Z = 1) and mu0 = P(Y = 1 | Z = 0) =====
 
     # ----- model-assisted CI -----
 
     # CI on mu1
-    lab_z1_df = lab_df.loc[lab_df[ptm_name] == 1]
     bias_lab_z1_n = lab_z1_df['disordered'].to_numpy() - lab_z1_df['pred_disordered'].to_numpy()
-    # get WoR CI on average bias Y_i - f_i
     bias_z1_ci = get_betting_wor_ci(  # biases have values in {-1, 0, 1}, rescale to [0, 1]
-        (bias_lab_z1_n + 1) / 2, N, alpha, grid_spacing, use_intersection=use_intersection,
+        (bias_lab_z1_n + 1) / 2, N_z1, alpha, grid_spacing, use_intersection=use_intersection,
         parallelize=parallelize, n_cores=n_cores
     )
     bias_z1_ci = bias_z1_ci * 2 - 1  # rescale to [-1, 1]
-
-    # average prediction f_i on all data (labeled and unlabeled)
     f_mean_z1 = z1_df['pred_disordered'].mean()
-    # add CI on bias to average prediction
     mu1_mai_ci = (np.maximum(f_mean_z1 + bias_z1_ci[0], 0), np.minimum(f_mean_z1 + bias_z1_ci[1], 1))
 
     # CI on mu0
-    lab_z0_df = lab_df.loc[lab_df[ptm_name] == 0]
     bias_lab_z0_n = lab_z0_df['disordered'].to_numpy() - lab_z0_df['pred_disordered'].to_numpy()
     bias_z0_ci = get_betting_wor_ci(
-        (bias_lab_z0_n + 1) / 2, N, alpha, grid_spacing, use_intersection=use_intersection,
+        (bias_lab_z0_n + 1) / 2, N_z0, alpha, grid_spacing, use_intersection=use_intersection,
         parallelize=parallelize, n_cores=n_cores
     )
     bias_z0_ci = bias_z0_ci * 2 - 1
-
     f_mean_z0 = z0_df['pred_disordered'].mean()
     mu0_mai_ci = (np.maximum(f_mean_z0 + bias_z0_ci[0], 0), np.minimum(f_mean_z0 + bias_z0_ci[1], 1))
 
@@ -182,11 +192,11 @@ def get_odds_ratio_betting_ci(df, ptm_name, lab_idx, alpha, grid_spacing: float 
     y_z1_n = lab_z1_df['disordered'].to_numpy()
     y_z0_n = lab_z0_df['disordered'].to_numpy()
     mu1_cla_ci = get_betting_wor_ci(
-        y_z1_n, N, alpha, grid_spacing, use_intersection=use_intersection,
+        y_z1_n, N_z1, alpha, grid_spacing, use_intersection=use_intersection,
         parallelize=parallelize, n_cores=n_cores
     )
     mu0_cla_ci = get_betting_wor_ci(
-        y_z0_n, N, alpha, grid_spacing, use_intersection=use_intersection,
+        y_z0_n, N_z0, alpha, grid_spacing, use_intersection=use_intersection,
         parallelize=parallelize, n_cores=n_cores
     )
 
@@ -195,28 +205,31 @@ def get_odds_ratio_betting_ci(df, ptm_name, lab_idx, alpha, grid_spacing: float 
     o_mai_ci = get_odds_ratio_ci_from_mu_ci(mu1_mai_ci, mu0_mai_ci)
     o_cla_ci = get_odds_ratio_ci_from_mu_ci(mu1_cla_ci, mu0_cla_ci)
 
-    # ----- true quantity -----
+    # ----- true quantities -----
+    mu1 = z1_df['disordered'].mean()
+    mu0 = z0_df['disordered'].mean()
     n_z1_y1 = len(df.loc[(df[ptm_name] == 1) & (df['disordered'] == 1)])
     n_z0_y1 = len(df.loc[(df[ptm_name] == 0) & (df['disordered'] == 1)])
     n_z1_y0 = len(df.loc[(df[ptm_name] == 1) & (df['ordered'] == 1)])
     n_z0_y0 = len(df.loc[(df[ptm_name] == 0) & (df['ordered'] == 1)])
     o = (n_z1_y1 / n_z0_y1) / (n_z1_y0 / n_z0_y0)
 
+
     if verbose:
         print('True mu1: {:.3f}.'.format(mu1))
-        print('  Model-assisted CI: [{:.2f}, {:.2f}] (length {:.2f})\n  Classical CI: [{:.2f}, {:.2f}] (length {:.2f}). '.format(
+        print('  Prediction-powered: [{:.2f}, {:.2f}] (length {:.2f})\n  Classical: [{:.2f}, {:.2f}] (length {:.2f}). '.format(
             mu1_mai_ci[0], mu1_mai_ci[1], mu1_mai_ci[1] - mu1_mai_ci[0],
             mu1_cla_ci[0], mu1_cla_ci[1], mu1_cla_ci[1] - mu1_cla_ci[0]))
         print('True mu0: {:.3f}.'.format(mu0))
-        print('  Model-assisted CI: [{:.2f}, {:.2f}] (length {:.2f}).\n  Classical CI: [{:.2f}, {:.2f}] (length {:.2f}). '.format(
+        print('  Prediction-powered: [{:.2f}, {:.2f}] (length {:.2f}).\n  Classical: [{:.2f}, {:.2f}] (length {:.2f}). '.format(
             mu0_mai_ci[0], mu0_mai_ci[1], mu0_mai_ci[1] - mu0_mai_ci[0],
             mu0_cla_ci[0], mu0_cla_ci[1], mu0_cla_ci[1] - mu0_cla_ci[0]))
         print('True odds ratio: {:.3f}.'.format(o))
-        print('  Model-assisted CI: [{:.2f}, {:.2f}] (length {:.2f}).\n  Classical CI: [{:.2f}, {:.2f}] (length {:.2f}). '.format(
+        print('  Prediction-powered: [{:.2f}, {:.2f}] (length {:.2f}).\n  Classical: [{:.2f}, {:.2f}] (length {:.2f}). '.format(
             o_mai_ci[0], o_mai_ci[1], o_mai_ci[1] - o_mai_ci[0],
             o_cla_ci[0], o_cla_ci[1], o_cla_ci[1] - o_cla_ci[0]))
 
-    return o, o_mai_ci, o_cla_ci, mu1, mu1_mai_ci, mu1_cla_ci, mu0, mu0_mai_ci, mu0_cla_ci
+    return mu1, mu1_mai_ci, mu1_cla_ci, mu0, mu0_mai_ci, mu0_cla_ci, o, o_mai_ci, o_cla_ci,
 
 
 
