@@ -6,6 +6,7 @@ import torch
 import folktables
 import pdb
 import matplotlib.pyplot as plt
+import matplotlib.patheffects as pe
 import seaborn as sns
 import pandas as pd
 
@@ -70,7 +71,7 @@ def trial(X, Y, Yhat, true, n, alpha):
 
     classical_interval = standard_logistic_interval(X_labeled, Y_labeled, alpha)
 
-    pp_interval = pp_logistic_interval(X_labeled, X_unlabeled, Y_labeled, Yhat_labeled, Yhat_unlabeled, alpha)
+    pp_interval = standard_logistic_interval(X_labeled, Y_labeled, alpha) #pp_logistic_interval(X_labeled, X_unlabeled, Y_labeled, Yhat_labeled, Yhat_unlabeled, alpha)
 
     return naive_interval, classical_interval, pp_interval
 
@@ -78,38 +79,57 @@ def make_plots(df, true):
     # Line plots
     ns = np.sort(np.unique(df["n"]))
 
-    fig, axs = plt.subplots(nrows=3, ncols=2, figsize=(10, 5))
+    fig, axs = plt.subplots(ncols=3, figsize=(10, 5))
     my_palette = sns.color_palette(["#71D26F","#BFB9B9","#D0A869"], 3)
     sns.set_theme(style="white", palette=my_palette, font_scale=1)
 
-    make_intervals(df[df["n"] == ns.min()], true, axs[0,:])
+    make_intervals(df[df["n"] == ns.min()], true, axs[0])
 
-    make_histograms(df[df["n"] == ns.min()], axs[1,:])
+    make_histograms(df[df["n"] == ns.min()], axs[1])
 
-    make_lineplots(df, axs[2,:])
+    make_lineplots(df, axs[2])
 
     plt.tight_layout()
-    plt.savefig('./ols-plots/results.pdf')
+    plt.savefig('./logistic-plots/results.pdf')
 
-def make_lineplots(df, axs):
-    plot_df = df[["coefficient", "estimator","width", "n"]].groupby(["coefficient", "estimator","n"], group_keys=False).mean()["width"].reset_index()
-    lplt = sns.lineplot(data=plot_df[(plot_df["coefficient"] == "age") & (plot_df["estimator"] != "naive")], x="n", y="width", hue="estimator", ax=axs[0], hue_order=["prediction-powered", "classical"])
-    axs[0].set_ylabel("mean width ($/yr)")
-    axs[0].set_xlabel("n")
-    axs[0].xaxis.set_tick_params()
-    axs[0].yaxis.set_tick_params()
-    sns.despine(ax=axs[0],top=True,right=True)
-    lplt.get_legend().remove()
-    lplt = sns.lineplot(data=plot_df[(plot_df["coefficient"] == "sex") & (plot_df["estimator"] != "naive")], x="n", y="width", hue="estimator", ax=axs[1], hue_order=["prediction-powered", "classical"])
-    axs[1].set_ylabel("mean width ($)")
-    axs[1].set_xlabel("n")
-    axs[1].xaxis.set_tick_params()
-    axs[1].yaxis.set_tick_params()
-    sns.despine(ax=axs[1],top=True,right=True)
-    lplt.get_legend().remove()
+def make_lineplots(df, ax):
+    plot_df = df[["estimator","width", "n"]].groupby(["estimator","n"], group_keys=False).mean()["width"].reset_index()
+    lplt = sns.lineplot(data=plot_df[plot_df["estimator"] != "naive"], x="n", y="width", hue="estimator", ax=ax, hue_order=["prediction-powered", "classical"])
+    ax.set_ylabel("mean width ($/yr)")
+    ax.set_xlabel("n")
+    ax.xaxis.set_tick_params()
+    ax.yaxis.set_tick_params()
+    sns.despine(ax=ax,top=True,right=True)
 
-def make_intervals(df, true, axs):
-    ci_naive = df[(df["coefficient"] == "age") & (df["estimator"] == "naive")]
+def make_intervals(df, true, ax):
+    ci_naive = df[df["estimator"] == "naive"]
+    ci_naive = [ci_naive["lb"].mean(), ci_naive["ub"].mean()]
+    ci_classical = df[df["estimator"] == "classical"]
+    ci_classical = [ci_classical["lb"].mean(), ci_classical["ub"].mean()]
+    ci = df[df["estimator"] == "prediction-powered"]
+    ci = [ci["lb"].mean(), ci["ub"].mean()]
+
+    ax.plot([ci[0], ci[1]],[0.8,0.8], linewidth=10, color="#DAF3DA", path_effects=[pe.Stroke(linewidth=11, foreground="#71D26F"), pe.Normal()], label='prediction-powered')
+    ax.plot([ci_classical[0], ci_classical[1]],[0.5, 0.5], linewidth=10, color="#EEEDED", path_effects=[pe.Stroke(linewidth=11, foreground="#BFB9B9"), pe.Normal()],  label='no ML')
+    ax.plot([ci_naive[0], ci_naive[1]],[0.2, 0.2], linewidth=10, color="#FFEACC", path_effects=[pe.Stroke(linewidth=11, foreground="#FFCD82"), pe.Normal()],  label='naive ML')
+    ax.vlines(true[0], ymin=0.0, ymax=1, linestyle="dotted", linewidth=3, label="ground truth", color="#F7AE7C")
+    ax.set_xlabel("age coeff")
+    ax.set_yticks([])
+    ax.set_yticklabels([])
+    ax.xaxis.set_tick_params()
+    ax.set_ylim([0,1])
+    ax.set_xlim([None, None])
+    sns.despine(ax=ax,top=True,right=True,left=True)
+
+def make_histograms(df, ax):
+    # Width figure
+    kde0 = sns.kdeplot(df[df["estimator"] != "naive"], ax=ax, x="width", hue="estimator", hue_order=["prediction-powered", "classical"], fill=True, clip=(0,None), cut=0)
+    ax.set_ylabel("")
+    ax.set_xlabel("width (age coeff, $/yr)")
+    ax.set_yticks([])
+    ax.set_yticklabels([])
+    kde0.get_legend().remove()
+    sns.despine(ax=ax,top=True,right=True,left=True)
 
 def get_tree(year=2017):
     try:
@@ -125,30 +145,30 @@ def get_tree(year=2017):
 
 if __name__ == "__main__":
     os.makedirs('./logistic-plots', exist_ok=True)
+    # Train tree on 2017 data
+    np.random.seed(0) # Fix seed for tree
+    tree = get_tree()
+    np.random.seed(0) # Fix seed for evaluation
+
+    # Evaluate tree and plot data in 2018
+    features_2018, privcov_2018 = get_data(year=2018, features=['AGEP','SCHL','MAR','RELP','DIS','PINCP','ESP','CIT','MIG','MIL','ANC','NATIVITY','DEAR','DEYE','DREM','SEX','RAC1P'], outcome='PRIVCOV', filter=filter)
+    predicted_privcov_2018 = tree.predict(xgb.DMatrix(features_2018.to_numpy()))
+    pincp_2018 = features_2018['PINCP']
+    plot_data(pincp_2018, privcov_2018)
+
+    # Collect logistic features and do MAI
+    X = np.stack([pincp_2018, np.ones_like(pincp_2018)], axis=1)
+    col_norms = np.linalg.norm(X,axis=0)
+    X = X / col_norms[None,:]
+    XTy = X.T@privcov_2018
+    true = logistic(X, XTy)
+
+    print(f"True logistic regression coefficients: {true/col_norms}")
     try:
         df = pd.read_pickle('./.cache/logistic-results.pkl')
     except:
-        # Train tree on 2017 data
-        np.random.seed(0) # Fix seed for tree
-        tree = get_tree()
-        np.random.seed(0) # Fix seed for evaluation
-
-        # Evaluate tree and plot data in 2018
-        features_2018, privcov_2018 = get_data(year=2018, features=['AGEP','SCHL','MAR','RELP','DIS','PINCP','ESP','CIT','MIG','MIL','ANC','NATIVITY','DEAR','DEYE','DREM','SEX','RAC1P'], outcome='PRIVCOV', filter=filter)
-        predicted_privcov_2018 = tree.predict(xgb.DMatrix(features_2018.to_numpy()))
-        pincp_2018 = features_2018['PINCP']
-        plot_data(pincp_2018, privcov_2018)
-
-        # Collect logistic features and do MAI
-        X = np.stack([pincp_2018, np.ones_like(pincp_2018)], axis=1)
-        col_norms = np.linalg.norm(X,axis=0)
-        X = X / col_norms[None,:]
-        XTy = X.T@privcov_2018
-        true = logistic(X, XTy)
-
-        print(f"True logistic regression coefficients: {true/col_norms}")
         N = features_2018.shape[0]
-        num_n = 50
+        num_n = 7
         ns = np.linspace(1000, 10000, num_n).astype(int)
         num_trials = 1
         alpha = 0.05
@@ -157,12 +177,12 @@ if __name__ == "__main__":
         columns = ["lb","ub","covered","estimator","n"]
 
         results = []
-        for i in tqdm(range(num_trials)):
-            for j in range(ns.shape[0]):
+        for j in range(ns.shape[0]):
+            for i in range(num_trials):
                 n = ns[j]
                 ii, ci, ppi = trial(X, privcov_2018.to_numpy(), predicted_privcov_2018, true, n, alpha)
                 temp_df = pd.DataFrame(np.zeros((3,len(columns))), columns=columns)
-                temp_df.loc[0] = ii[0], ii[1], (ii[0] <= true) & (true[0] <= ii[1]), "naive", n
+                temp_df.loc[0] = ii[0][0], ii[1][0], (ii[0][0] <= true[0]) & (true[0] <= ii[1][0]), "naive", n
                 temp_df.loc[1] = ci[0][0], ci[1][0], (ci[0][0] <= true[0]) & (true[0] <= ci[1][0]), "classical", n
                 temp_df.loc[2] = ppi[0][0], ppi[1][0], (ppi[0][0] <= true[0]) & (true[0] <= ppi[1][0]), "prediction-powered", n
                 results += [temp_df]
@@ -170,4 +190,4 @@ if __name__ == "__main__":
         df["width"] = df["ub"] - df["lb"]
         df.to_pickle('./.cache/logistic-results.pkl')
 
-    make_histograms(df)
+    make_plots(df, true)
