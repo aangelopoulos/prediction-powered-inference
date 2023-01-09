@@ -51,7 +51,7 @@ def train_eval_regressor(features, outcome, add_bias=True):
 
 def plot_data(pincp, privcov):
     plt.figure(figsize=(7.5,2.5))
-    sns.set_theme(style="white", palette="pastel", font_scale=1.25)
+    sns.set_theme(style="white", palette="pastel", font_scale=1.15)
     bins = [20000,40000,60000,80000,100000]
     incomeranges = np.digitize(pincp, bins=bins)
     avgs = [privcov[incomeranges == i].mean() for i in range(len(bins)+1)]
@@ -61,7 +61,7 @@ def plot_data(pincp, privcov):
     plt.gca().set_ylim([0,1])
     plt.xlabel('household income ($)')
     sns.despine(top=True, right=True)
-    plt.subplots_adjust(top=0.95, bottom=0.05)
+    plt.subplots_adjust(top=0.9, bottom=0.28)
     plt.savefig("./logistic-plots/raw_data.pdf")
 
 def trial(X, Y, Yhat, true, n, alpha):
@@ -79,9 +79,9 @@ def make_plots(df, true):
     # Line plots
     ns = np.sort(np.unique(df["n"]))
 
-    fig, axs = plt.subplots(ncols=3, figsize=(9, 3))
     my_palette = sns.color_palette(["#71D26F","#BFB9B9","#D0A869"], 3)
-    sns.set_theme(style="white", palette=my_palette, font_scale=1)
+    sns.set_theme(style="white", palette=my_palette, font_scale=0.95)
+    fig, axs = plt.subplots(ncols=3, figsize=(8, 2.5))
 
     make_histograms(df[df["n"] == ns.min()], axs[0])
 
@@ -100,6 +100,7 @@ def make_lineplots(df, ax):
     ax.set_xlabel("n")
     ax.xaxis.set_tick_params()
     ax.yaxis.set_tick_params()
+    ax.locator_params(tight=True, nbins=4)
     lplt.get_legend().remove()
     sns.despine(ax=ax,top=True,right=True)
 
@@ -115,13 +116,13 @@ def make_intervals(df, true, ax):
     ax.plot([ci_classical[0], ci_classical[1]],[0.5, 0.5], linewidth=10, color="#EEEDED", path_effects=[pe.Stroke(linewidth=11, foreground="#BFB9B9"), pe.Normal()],  label='no ML')
     ax.plot([ci_naive[0], ci_naive[1]],[0.2, 0.2], linewidth=10, color="#FFEACC", path_effects=[pe.Stroke(linewidth=11, foreground="#FFCD82"), pe.Normal()],  label='naive ML')
     ax.vlines(true[0], ymin=0.0, ymax=1, linestyle="dotted", linewidth=3, label="ground truth", color="#F7AE7C")
-    ax.set_xlabel("CIs")
+    ax.set_xlabel("coefficient")
     ax.set_yticks([])
     ax.set_yticklabels([])
     ax.xaxis.set_tick_params()
     ax.set_ylim([0,1])
     ax.set_xlim([None, None])
-    ax.legend(bbox_to_anchor = (0.7,1.25), borderpad=1)
+    ax.legend(bbox_to_anchor = (0.7,1.35), borderpad=1)
     sns.despine(ax=ax,top=True,right=True,left=True)
 
 def make_histograms(df, ax):
