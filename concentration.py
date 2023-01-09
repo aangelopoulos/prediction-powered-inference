@@ -1,7 +1,10 @@
 import numpy as np
+import matplotlib.pyplot as plt
 import itertools
 from scipy.stats import binom, norm
+from scipy.special import expit
 from scipy.optimize import brentq
+from sklearn.linear_model import LogisticRegression
 from joblib import delayed, Parallel
 import pdb
 
@@ -120,49 +123,95 @@ def pp_ols_interval(X_labeled, X_unlabeled, Y_labeled, Yhat_labeled, Yhat_unlabe
 """
     Logistic regression algorithm
 """
-def logistic(X, XTy, lr=1):
-    betahat = np.array([0,0])
-    for epoch in range(1000):
-        p = expit(X@betahat) # This is equal to 1./(1. + np.exp(-X@betahat))
-        grad = X.T@p - XTy
-        betahat = betahat - lr*grad
-    return betahat
+def logistic(X, y):
+    clf = LogisticRegression(penalty='none').fit(X,y)
+    return clf.coef_.squeeze()
 
+#def logistic(X, XTyN, lr=1e-11, iters=100000, init=np.array([2.09549571e-05, -1.94014661e-08])): # Takes X and X.T@Y/N where N = X.shape[0]
+#    betahat = init
+#    N = X.shape[0]
+#    for epoch in range(iters):
+#        p = expit(X@betahat) # This is equal to 1./(1. + np.exp(-X@betahat))
+#        grad = (X.T@p)/N - XTyN
+#        print(epoch, grad, betahat)
+#        betahat = betahat - lr*grad
+#    if grad.max() > 1e-3:
+#        print("Warning: gradient is still large.")
+#    return betahat
 
 def product(*args, **kwds):
     # product('ABCD', 'xy') --> Ax Ay Bx By Cx Cy Dx Dy
     # product(range(2), repeat=3) --> 000 001 010 011 100 101 110 111
-    pools = map(tuple, args) * kwds.get('repeat', 1)
+    pools = map(tuple, args)
     result = [[]]
     for pool in pools:
         result = [x+[y] for x in result for y in pool]
     for prod in result:
         yield tuple(prod)
 
-def standard_logistic_interval(X, Y, alpha, num_grid=100):
+def standard_logistic_interval(X, Y, alpha, num_grid=1000):
     n = X.shape[0]
     d = X.shape[1]
-    XTy = X.T@Y
+    delta = alpha*0.9
+    point_estimate = logistic(X, (Y.astype(int) > 0.5).astype(int)) # Used for setting the grid.
+
     mean = 1/n * X.T @ Y
-    sigmahat = np.sqrt(1/n * ((X * (Y - mean[None,:]))**2).sum(axis=0))
-    XTy_halfwidth = norm.ppf(1-alpha/2) * sigmahat/np.sqrt(n)
-    XTy_rectangle_coords = np.linspace(XTy-XTy_halfwidth, XTy+XTy_halfwidth, num_grid)
-    XTy_rectangle = product(*tuple([XTy_rectangle_coords[:,j] for j in range(d)]))
-    theta_ci = np.array([logistic(X, _XTy) for _XTy in XTy_rectangle])
-    return [theta_ci.min(axis=0), theta_ci.max(axis=0)]
+    sigmahat_cov = np.std(X * Y[:,None], axis=0)
+    XTyn_halfwidth = norm.ppf(1-delta/(2*d)) * sigmahat_cov/np.sqrt(n)
 
-def pp_logistic_interval(X_labeled, X_unlabeled, Y_labeled, Yhat_labeled, Yhat_unlabeled, alpha, num_grid=100):
+    theta_grid = np.linspace(-3*point_estimate, point_estimate*3, num_grid)
+
+    mu = expit(X@theta_grid.T)
+    g = 1/n * X.T@(mu - Y[:, None])
+
+    sigmahat_err = np.std(X[:,:,None]*(mu - Y[:,None])[:,None,:], axis=0)
+    err_halfwidth = norm.ppf(1-(alpha-delta)/(2*d)) * sigmahat_err/np.sqrt(n)
+
+    total_halfwidth = XTyn_halfwidth[:,None] + err_halfwidth
+
+    condition = np.all(np.abs(g) <= total_halfwidth, axis=0)
+
+    Cpp = theta_grid[condition]
+
+    # TODO: If all positive, make grid wider
+    assert condition[0] == False & condition[-1] == False
+
+    return [ Cpp.min(axis=0), Cpp.max(axis=0) ]
+
+def pp_logistic_interval(X_labeled, X_unlabeled, Y_labeled, Yhat_labeled, Yhat_unlabeled, alpha, num_grid=1000):
+    X = np.concatenate([X_labeled, X_unlabeled], axis=0)
     n = X_labeled.shape[0]
-    N = n + X_unlabeled.shape[0]
     d = X_labeled.shape[1]
-    rechat = 1/n * X_labeled.T@(Yhat_labeled - Y_labeled)
-    sigmahat_rec = np.sqrt(1/n * ((X_labeled * (Y_labeled - rechat[None,:]))**2).sum(axis=0))
+    N = n + X_unlabeled.shape[0]
+    Yhat_labeled = np.clip(Yhat_labeled, 0, 1) # TODO: Check for an improvement after clipping
+    Yhat_unlabeled = np.clip(Yhat_unlabeled, 0, 1)
 
-    XTy_halfwidth = norm.ppf(1-alpha/2) * sigmahat/np.sqrt(n)
-    XTy_rectangle_coords = np.linspace(XTy-XTy_halfwidth, XTy+XTy_halfwidth, num_grid)
-    XTy_rectangle = product(*tuple([XTy_rectangle_coords[:,j] for j in range(d)]))
-    theta_ci = np.array([logistic(X, _XTy) for _XTy in XTy_rectangle])
-    return [theta_ci.min(axis=0), theta_ci.max(axis=0)]
+    Yhat = np.concatenate([Yhat_labeled, Yhat_unlabeled], axis=0)
+    delta = alpha*0.9
+    point_estimate = logistic(X_labeled, (Y_labeled > 0.5).astype(int))
+
+    rechat = 1/n * X_labeled.T @ (Yhat_labeled - Y_labeled)
+    sigmahat_rec = np.std(X_labeled * (Yhat_labeled - Y_labeled)[:,None], axis=0)
+    rec_halfwidth = norm.ppf(1-delta/(2*d)) * sigmahat_rec/np.sqrt(n)
+
+    theta_grid = np.linspace(-5*point_estimate, point_estimate*5, num_grid)
+
+    mu = expit(X@theta_grid.T)
+    g = 1/N * X.T@(mu - Yhat[:, None])
+
+    sigmahat_err = np.std(X[:,:,None]*(mu - Yhat[:,None])[:,None,:], axis=0)
+    err_halfwidth = norm.ppf(1-(alpha-delta)/(2*d)) * sigmahat_err/np.sqrt(N)
+
+    total_halfwidth = rec_halfwidth[:,None] + err_halfwidth
+
+    condition = np.all( np.abs(g + rechat[:,None]) <= total_halfwidth, axis=0)
+
+    Cpp = theta_grid[condition]
+
+    # TODO: If all positive, make grid wider
+    assert condition[0] == False & condition[-1] == False
+
+    return [ Cpp.min(axis=0), Cpp.max(axis=0) ]
 
 """
     DISCRETE L_p ESTIMATION RATES
@@ -204,12 +253,3 @@ def wsr_swr(x,N,alpha,grid,num_cpus=10, intersection=True): # x is a [0,1] bound
         M_list =[M(grid, n),]
     ci_full = grid[np.where(np.prod(np.stack(M_list, axis=1) < 1/alpha , axis=1))[0]]
     return np.array([ci_full.min(), ci_full.max()]) # only output the interval
-
-if __name__ == "__main__":
-    x = np.random.choice(np.arange(10),size=(10000,), p=[0.8,0.1,0.05,0.03,0.01,0.005,0.002,0.001,0.001,0.001])
-    n = 1000
-    print(linfty_dkw(10000,10,0.1))
-    print(linfty_binom(10000,10,0.1,x[:n]))
-    x_oh = np.take(np.eye(10), x, axis=0)
-    qhat = x_oh.mean(axis=0)
-    print(qhat)

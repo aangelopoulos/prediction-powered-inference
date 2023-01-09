@@ -126,7 +126,7 @@ def make_intervals(df, true, ax):
 
 def make_histograms(df, ax):
     # Width figure
-    kde0 = sns.kdeplot(df[df["estimator"] != "naive"], ax=ax, x="width", hue="estimator", hue_order=["prediction-powered", "classical"], fill=True, clip=(0,None), cut=0)
+    kde0 = sns.kdeplot(df[df["estimator"] != "naive"], ax=ax, x="width", hue="estimator", hue_order=["prediction-powered", "classical"], fill=True, clip=(0,None))
     ax.set_ylabel("")
     ax.set_xlabel("width")
     ax.set_yticks([])
@@ -172,7 +172,7 @@ if __name__ == "__main__":
         N = features_2018.shape[0]
         num_n = 10
         ns = np.linspace(1000, 10000, num_n).astype(int)
-        num_trials = 50
+        num_trials = 10
         alpha = 0.05
 
         # Store results
