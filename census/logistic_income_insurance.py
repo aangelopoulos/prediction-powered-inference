@@ -71,7 +71,7 @@ def trial(X, Y, Yhat, true, n, alpha):
 
     classical_interval = standard_logistic_interval(X_labeled, Y_labeled, alpha)
 
-    pp_interval = standard_logistic_interval(X_labeled, Y_labeled, alpha) #pp_logistic_interval(X_labeled, X_unlabeled, Y_labeled, Yhat_labeled, Yhat_unlabeled, alpha)
+    pp_interval = pp_logistic_interval(X_labeled, X_unlabeled, Y_labeled, Yhat_labeled, Yhat_unlabeled, alpha)
 
     return naive_interval, classical_interval, pp_interval
 
@@ -79,26 +79,28 @@ def make_plots(df, true):
     # Line plots
     ns = np.sort(np.unique(df["n"]))
 
-    fig, axs = plt.subplots(ncols=3, figsize=(10, 5))
+    fig, axs = plt.subplots(ncols=3, figsize=(9, 3))
     my_palette = sns.color_palette(["#71D26F","#BFB9B9","#D0A869"], 3)
     sns.set_theme(style="white", palette=my_palette, font_scale=1)
 
-    make_intervals(df[df["n"] == ns.min()], true, axs[0])
+    make_histograms(df[df["n"] == ns.min()], axs[0])
 
-    make_histograms(df[df["n"] == ns.min()], axs[1])
+    make_lineplots(df, axs[1])
 
-    make_lineplots(df, axs[2])
+    make_intervals(df[df["n"] == ns.min()], true, axs[2])
 
-    plt.tight_layout()
+    plt.subplots_adjust(right=0.8, left=0.1, top=0.8, bottom=0.2)
+
     plt.savefig('./logistic-plots/results.pdf')
 
 def make_lineplots(df, ax):
     plot_df = df[["estimator","width", "n"]].groupby(["estimator","n"], group_keys=False).mean()["width"].reset_index()
     lplt = sns.lineplot(data=plot_df[plot_df["estimator"] != "naive"], x="n", y="width", hue="estimator", ax=ax, hue_order=["prediction-powered", "classical"])
-    ax.set_ylabel("mean width ($/yr)")
+    ax.set_ylabel("mean width")
     ax.set_xlabel("n")
     ax.xaxis.set_tick_params()
     ax.yaxis.set_tick_params()
+    lplt.get_legend().remove()
     sns.despine(ax=ax,top=True,right=True)
 
 def make_intervals(df, true, ax):
@@ -113,19 +115,20 @@ def make_intervals(df, true, ax):
     ax.plot([ci_classical[0], ci_classical[1]],[0.5, 0.5], linewidth=10, color="#EEEDED", path_effects=[pe.Stroke(linewidth=11, foreground="#BFB9B9"), pe.Normal()],  label='no ML')
     ax.plot([ci_naive[0], ci_naive[1]],[0.2, 0.2], linewidth=10, color="#FFEACC", path_effects=[pe.Stroke(linewidth=11, foreground="#FFCD82"), pe.Normal()],  label='naive ML')
     ax.vlines(true[0], ymin=0.0, ymax=1, linestyle="dotted", linewidth=3, label="ground truth", color="#F7AE7C")
-    ax.set_xlabel("age coeff")
+    ax.set_xlabel("CIs")
     ax.set_yticks([])
     ax.set_yticklabels([])
     ax.xaxis.set_tick_params()
     ax.set_ylim([0,1])
     ax.set_xlim([None, None])
+    ax.legend(bbox_to_anchor = (0.7,1.25), borderpad=1)
     sns.despine(ax=ax,top=True,right=True,left=True)
 
 def make_histograms(df, ax):
     # Width figure
     kde0 = sns.kdeplot(df[df["estimator"] != "naive"], ax=ax, x="width", hue="estimator", hue_order=["prediction-powered", "classical"], fill=True, clip=(0,None), cut=0)
     ax.set_ylabel("")
-    ax.set_xlabel("width (age coeff, $/yr)")
+    ax.set_xlabel("width")
     ax.set_yticks([])
     ax.set_yticklabels([])
     kde0.get_legend().remove()
@@ -145,6 +148,7 @@ def get_tree(year=2017):
 
 if __name__ == "__main__":
     os.makedirs('./logistic-plots', exist_ok=True)
+    normalize = True
     # Train tree on 2017 data
     np.random.seed(0) # Fix seed for tree
     tree = get_tree()
@@ -158,19 +162,17 @@ if __name__ == "__main__":
 
     # Collect logistic features and do MAI
     X = np.stack([pincp_2018, np.ones_like(pincp_2018)], axis=1)
-    col_norms = np.linalg.norm(X,axis=0)
-    X = X / col_norms[None,:]
-    XTy = X.T@privcov_2018
-    true = logistic(X, XTy)
+    true = logistic(X, privcov_2018)
 
-    print(f"True logistic regression coefficients: {true/col_norms}")
+    print(f"True logistic regression coefficients: {true}")
+
     try:
         df = pd.read_pickle('./.cache/logistic-results.pkl')
     except:
         N = features_2018.shape[0]
-        num_n = 7
+        num_n = 10
         ns = np.linspace(1000, 10000, num_n).astype(int)
-        num_trials = 1
+        num_trials = 50
         alpha = 0.05
 
         # Store results
