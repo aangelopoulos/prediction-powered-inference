@@ -2,7 +2,6 @@ import os
 import sys
 sys.path.insert(1, '../')
 import numpy as np
-import torch
 import folktables
 import pdb
 import matplotlib.pyplot as plt
@@ -113,14 +112,9 @@ def make_intervals(df, true, ax):
     ci = df[df["estimator"] == "prediction-powered"]
     ci = [ci["lb"].mean(), ci["ub"].mean()]
 
-    ci_eps = 0.02*(ci[1]-ci[0])
-
-    ax.plot([ci[0], ci[1]],[0.4,0.4], linewidth=22, color="#71D26F", solid_capstyle='butt')
-    ax.plot([ci[0]+ci_eps, ci[1]-ci_eps],[0.4,0.4], linewidth=20, color="#DAF3DA", label='prediction-powered', solid_capstyle='butt')
-    ax.plot([ci_classical[0], ci_classical[1]],[0.25, 0.25], linewidth=22, color="#BFB9B9", solid_capstyle='butt')
-    ax.plot([ci_classical[0]+ci_eps, ci_classical[1]-ci_eps],[0.25, 0.25], linewidth=20, color="#EEEDED", label='no ML', solid_capstyle='butt')
-    ax.plot([ci_naive[0], ci_naive[1]],[0.1, 0.1], linewidth=22, color="#FFCD82", solid_capstyle='butt')
-    ax.plot([ci_naive[0]+ci_eps, ci_naive[1]-ci_eps],[0.1, 0.1], linewidth=20, color="#FFEACC", label='naive ML', solid_capstyle='butt')
+    ax.plot([ci[0], ci[1]],[0.4,0.4], linewidth=20, color="#DAF3DA", path_effects=[pe.Stroke(linewidth=22, offset=(-1,0), foreground="#71D26F"), pe.Stroke(linewidth=22, offset=(1,0), foreground="#71D26F"), pe.Normal()], label='prediction-powered', solid_capstyle='butt')
+    ax.plot([ci_classical[0], ci_classical[1]],[0.25, 0.25], linewidth=20, color="#EEEDED", path_effects=[pe.Stroke(linewidth=22, offset=(-1,0), foreground="#BFB9B9"), pe.Stroke(linewidth=22, offset=(1,0), foreground="#BFB9B9"), pe.Normal()], label='no ML', solid_capstyle='butt')
+    ax.plot([ci_naive[0], ci_naive[1]],[0.1, 0.1], linewidth=20, color="#FFEACC", path_effects=[pe.Stroke(linewidth=22, offset=(-1,0), foreground="#FFCD82"), pe.Stroke(linewidth=22, offset=(1,0), foreground="#FFCD82"), pe.Normal()], label='naive ML', solid_capstyle='butt')
     ax.vlines(true[0], ymin=0.0, ymax=1, linestyle="dotted", linewidth=3, label="ground truth", color="#F7AE7C")
     ax.set_xlabel("coefficient")
     ax.set_yticks([])
