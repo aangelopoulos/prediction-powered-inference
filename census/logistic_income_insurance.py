@@ -80,8 +80,8 @@ def make_plots(df, true):
     ns = np.sort(np.unique(df["n"]))
 
     my_palette = sns.color_palette(["#71D26F","#BFB9B9","#D0A869"], 3)
-    sns.set_theme(style="white", palette=my_palette, font_scale=0.95)
-    fig, axs = plt.subplots(ncols=3, figsize=(8, 2.5))
+    sns.set_theme(style="white", palette=my_palette, font_scale=1.2)
+    fig, axs = plt.subplots(ncols=3, figsize=(14, 3))
 
     make_histograms(df[df["n"] == ns.min()], axs[0])
 
@@ -89,7 +89,8 @@ def make_plots(df, true):
 
     make_intervals(df[df["n"] == ns.min()], true, axs[2])
 
-    plt.subplots_adjust(right=0.8, left=0.1, top=0.8, bottom=0.2)
+    plt.tight_layout()
+    #plt.subplots_adjust(right=0.8, left=0.1, top=0.8, bottom=0.2)
 
     plt.savefig('./logistic-plots/results.pdf')
 
@@ -112,17 +113,17 @@ def make_intervals(df, true, ax):
     ci = df[df["estimator"] == "prediction-powered"]
     ci = [ci["lb"].mean(), ci["ub"].mean()]
 
-    ax.plot([ci[0], ci[1]],[0.8,0.8], linewidth=10, color="#DAF3DA", path_effects=[pe.Stroke(linewidth=11, foreground="#71D26F"), pe.Normal()], label='prediction-powered')
-    ax.plot([ci_classical[0], ci_classical[1]],[0.5, 0.5], linewidth=10, color="#EEEDED", path_effects=[pe.Stroke(linewidth=11, foreground="#BFB9B9"), pe.Normal()],  label='no ML')
-    ax.plot([ci_naive[0], ci_naive[1]],[0.2, 0.2], linewidth=10, color="#FFEACC", path_effects=[pe.Stroke(linewidth=11, foreground="#FFCD82"), pe.Normal()],  label='naive ML')
+    ax.plot([ci[0], ci[1]],[0.4,4], linewidth=20, color="#DAF3DA", path_effects=[pe.Stroke(linewidth=22, foreground="#71D26F"), pe.Normal()], label='prediction-powered')
+    ax.plot([ci_classical[0], ci_classical[1]],[0.25, 0.25], linewidth=20, color="#EEEDED", path_effects=[pe.Stroke(linewidth=22, foreground="#BFB9B9"), pe.Normal()],  label='no ML')
+    ax.plot([ci_naive[0], ci_naive[1]],[0.1, 0.1], linewidth=10, color="#FFEACC", path_effects=[pe.Stroke(linewidth=22, foreground="#FFCD82"), pe.Normal()],  label='naive ML')
     ax.vlines(true[0], ymin=0.0, ymax=1, linestyle="dotted", linewidth=3, label="ground truth", color="#F7AE7C")
     ax.set_xlabel("coefficient")
     ax.set_yticks([])
     ax.set_yticklabels([])
     ax.xaxis.set_tick_params()
-    ax.set_ylim([0,1])
+    ax.set_ylim([0,0.5])
     ax.set_xlim([None, None])
-    ax.legend(bbox_to_anchor = (0.7,1.35), borderpad=1)
+    ax.legend(bbox_to_anchor = (1,1), borderpad=1, labelspacing = 1)
     sns.despine(ax=ax,top=True,right=True,left=True)
 
 def make_histograms(df, ax):
