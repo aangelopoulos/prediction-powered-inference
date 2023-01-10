@@ -105,7 +105,7 @@ def standard_ols_interval(X, Y, alpha, return_halfwidth=False, sandwich=True):
     if return_halfwidth:
         return halfwidth
     else:
-        #print(f"standard: {halfwidth}")
+        print(f"standard: {halfwidth}")
         return thetahat - halfwidth, thetahat + halfwidth
 
 def pp_ols_interval(X_labeled, X_unlabeled, Y_labeled, Yhat_labeled, Yhat_unlabeled, alpha, sandwich=True):
@@ -114,10 +114,10 @@ def pp_ols_interval(X_labeled, X_unlabeled, Y_labeled, Yhat_labeled, Yhat_unlabe
     thetatildef = ols(X_unlabeled, Yhat_unlabeled)
     rectifierhat = ols(X_labeled, Y_labeled - Yhat_labeled)
     pp_thetahat = thetatildef + rectifierhat
-    hw_tildef = standard_ols_interval(X_unlabeled, Yhat_unlabeled, 0.1*alpha, return_halfwidth=True, sandwich=sandwich)
-    hw_rectifier = standard_ols_interval(X_labeled, Y_labeled-Yhat_labeled, 0.9*alpha, return_halfwidth=True, sandwich=sandwich)
+    hw_tildef = standard_ols_interval(X_unlabeled, Yhat_unlabeled, 0.001*alpha, return_halfwidth=True, sandwich=sandwich)
+    hw_rectifier = standard_ols_interval(X_labeled, Y_labeled-Yhat_labeled, 0.999*alpha, return_halfwidth=True, sandwich=sandwich)
     halfwidth = hw_tildef + hw_rectifier
-    #print(f"pp: {halfwidth}")
+    print(f"pp: {halfwidth}")
     return pp_thetahat - halfwidth, pp_thetahat + halfwidth
 
 """

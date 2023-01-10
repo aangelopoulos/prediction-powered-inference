@@ -9,12 +9,11 @@ import matplotlib.patheffects as pe
 import seaborn as sns
 import pandas as pd
 
-import scipy
 from scipy.optimize import brentq
 from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import make_pipeline
-from sklearn.preprocessing import OneHotEncoder
+from sklearn.preprocessing import StandardScaler
 import xgboost as xgb
 from hyperopt import STATUS_OK, Trials, fmin, hp, tpe
 from tqdm import tqdm
@@ -48,19 +47,11 @@ def get_data(year,features,outcome, randperm=True):
         income_features, income, employed = income_features.iloc[shuffler], income.iloc[shuffler], employed[shuffler]
     return income_features, income, employed
 
-def transform_features(features, ft, enc=None):
-    c_features = features.T[ft == "c"].T.astype(str)
-    if enc is None:
-        enc = OneHotEncoder(handle_unknown='ignore', drop='if_binary', sparse=False)
-        enc.fit(c_features)
-    c_features = enc.transform(c_features)
-    features = scipy.sparse.csc_matrix(np.concatenate([features.T[ft == "q"].T.astype(float), c_features], axis=1))
-    return features, enc
-
-def train_eval_regressor(features, outcome, add_bias=True):
+def train_eval_regressor(features, outcome, ft, add_bias=True):
     X_train, X_test, y_train, y_test = train_test_split(features, outcome, test_size=0.2)
-    dtrain = xgb.DMatrix(X_train, label=y_train)
-    dtest = xgb.DMatrix(X_test, label=y_test)
+    pdb.set_trace()
+    dtrain = xgb.DMatrix(X_train, label=y_train, feature_types=ft, enable_categorical=True)
+    dtest = xgb.DMatrix(X_test, label=y_test, feature_types=ft, enable_categorical=True)
     num_round = 1000
 
     lossfns = ['reg:squarederror', 'reg:pseudohubererror']
@@ -75,7 +66,7 @@ def train_eval_regressor(features, outcome, add_bias=True):
     evallist = [(dtest, 'eval'), (dtrain, 'train')]
 
     def objective(params):
-        tree = xgb.train(params, dtrain, num_round, evallist, enable_categorical=True)
+        tree = xgb.train(params, dtrain, num_round, evallist)
         print(params)
 
         pred = tree.predict(dtest)
@@ -93,7 +84,7 @@ def train_eval_regressor(features, outcome, add_bias=True):
     #print(best_hyperparams)
     #best_hyperparams['objective'] = lossfns[best_hyperparams['objective']]
     #tree = xgb.train(best_hyperparams, dtrain, num_round, evallist)
-    tree = xgb.train({'eta': 0.3, 'max_depth': 7, 'objective': 'reg:pseudohubererror'}, dtrain, 10000, evallist)
+    tree = xgb.train({'eta': 0.8, 'max_depth': 30, 'objective': 'reg:pseudohubererror'}, dtrain, 10000, evallist)
     return tree
 
 
@@ -109,28 +100,28 @@ def plot_data(age,income,sex):
     plt.tight_layout()
     plt.savefig("./ols-plots/raw_data.pdf")
 
-def get_tree(year, features, ft, enc=None):
+def get_tree(year, features, feature_types):
     try:
         income_tree = xgb.Booster()
         income_tree.load_model(f"./.cache/ols-model{year}.json")
     except:
         income_features, income, employed = get_data(year=year, features=features, outcome='PINCP')
-        income_tree = train_eval_regressor(transform_features(income_features, ft, enc)[0], income.to_numpy())
+        income_tree = train_eval_regressor(income_features.to_numpy(), income_2017.to_numpy())
         os.makedirs("./.cache/", exist_ok=True)
         income_tree.save_model(f"./.cache/ols-model{year}.json")
     return income_tree
 
-def trial(ols_features_2019, income_2019, predicted_income_2019, n, alpha, sandwich=True):
-    X_labeled, X_unlabeled, Y_labeled, Y_unlabeled, Yhat_labeled, Yhat_unlabeled = train_test_split(ols_features_2019, income_2019, predicted_income_2019, train_size=n)
+def trial(ols_features_2018, income_2018, predicted_income_2018, n, alpha):
+    X_labeled, X_unlabeled, Y_labeled, Y_unlabeled, Yhat_labeled, Yhat_unlabeled = train_test_split(ols_features_2018, income_2018, predicted_income_2018, train_size=n)
     X = np.concatenate([X_labeled, X_unlabeled],axis=0)
 
     Yhat = np.concatenate([Yhat_labeled, Yhat_unlabeled], axis=0)
 
-    naive_interval = standard_ols_interval(X, Yhat, alpha, sandwich=sandwich)
+    naive_interval = standard_ols_interval(X, Yhat, alpha, sandwich=False)
 
-    classical_interval = standard_ols_interval(X_labeled, Y_labeled, alpha, sandwich=sandwich)
+    classical_interval = standard_ols_interval(X_labeled, Y_labeled, alpha, sandwich=False)
 
-    pp_interval = pp_ols_interval(X_labeled, X_unlabeled, Y_labeled, Yhat_labeled, Yhat_unlabeled, alpha, sandwich=sandwich)
+    pp_interval = pp_ols_interval(X_labeled, X_unlabeled, Y_labeled, Yhat_labeled, Yhat_unlabeled, alpha, sandwich=False)
 
     return naive_interval, classical_interval, pp_interval
 
@@ -237,36 +228,37 @@ def make_histograms(df, axs):
 
 if __name__ == "__main__":
     os.makedirs('./ols-plots', exist_ok=True)
-    features = ['AGEP','SCHL','MAR','DIS','ESP','CIT','MIG','MIL','ANC1P','NATIVITY','DEAR','DEYE','DREM','SEX','RAC1P', 'SOCP', 'COW']
-    ft = np.array(["q", "q", "c", "c", "c", "c", "c", "c", "c", "c", "c", "c", "c", "c", "c", "c", "c"])
-    income_features_2019, income_2019, employed_2019 = get_data(year=2019, features=features, outcome='PINCP')
-    age_2019 = income_features_2019['AGEP'].to_numpy()
-    income_2019 = income_2019.to_numpy()
-    sex_2019 = income_features_2019['SEX'].to_numpy()
-    income_features_2019, enc = transform_features(income_features_2019, ft)
-    plot_data(age_2019[employed_2019], income_2019[employed_2019], sex_2019[employed_2019])
+    pdb.set_trace()
+    features = ['AGEP','SCHL','MAR','RELP','DIS','ESP','CIT','MIG','MIL','ANC1P','NATIVITY','DEAR','DEYE','DREM','SEX','RAC1P', 'SOCP', 'COW']
+    ft = ["q", "q", "c", "c", "c", "c", "c", "c", "c", "c", "c", "c", "c",, "c", "c", "c", "c", "c", "c"]
+    income_features_2018, income_2018, employed_2018 = get_data(year=2018, features=features, outcome='PINCP')
+    age_2018 = income_features_2018['AGEP'].to_numpy()
+    income_2018 = income_2018.to_numpy()
+    sex_2018 = income_features_2018['SEX'].to_numpy()
+    income_features_2018 = income_features_2018.to_numpy()
+    plot_data(age_2018, income_2018, sex_2018)
 
     # OLS solution
-    ols_features_2019 = np.stack([age_2019, sex_2019], axis=1)
-    true = ols(ols_features_2019, income_2019)
+    ols_features_2018 = np.stack([age_2018, sex_2018], axis=1)
+    true = ols(ols_features_2018, income_2018)
 
     try:
         df = pd.read_pickle('./.cache/ols-results.pkl')
     except:
-        # Train tree on 2018 data
+        # Train tree on 2017 data
         np.random.seed(0) # Fix seed for tree
-        income_tree = get_tree(2018, features, ft, enc=enc)
+        income_tree = get_tree()
         np.random.seed(0) # Fix seed for evaluation
 
         # Evaluate Tree
-        predicted_income_2019 = income_tree.predict(xgb.DMatrix(income_features_2019))
+        predicted_income_2018 = income_tree.predict(xgb.DMatrix(income_features_2018))
 
         # Collect OLS features and do MAI
         print(f"True OLS coefficients: {true}")
-        N = ols_features_2019.shape[0]
-        num_n = 10
-        ns = np.linspace(100, 2000, num_n).astype(int)
-        num_trials = 50
+        N = ols_features_2018.shape[0]
+        num_n = 50
+        ns = np.linspace(2000, 5000, num_n).astype(int)
+        num_trials = 500
         alpha = 0.05
 
         # Store results
@@ -276,7 +268,7 @@ if __name__ == "__main__":
         for i in tqdm(range(num_trials)):
             for j in range(ns.shape[0]):
                 n = ns[j]
-                ii, ci, ppi = trial(ols_features_2019, income_2019, predicted_income_2019, n, alpha)
+                ii, ci, ppi = trial(ols_features_2018, income_2018, predicted_income_2018, n, alpha)
                 temp_df = pd.DataFrame(np.zeros((6,len(columns))), columns=columns)
                 temp_df.loc[0] = ii[0][0], ii[1][0], (ii[0][0] <= true[0]) & (true[0] <= ii[1][0]), "naive", "age", n
                 temp_df.loc[1] = ci[0][0], ci[1][0], (ci[0][0] <= true[0]) & (true[0] <= ci[1][0]), "classical", "age", n
