@@ -1,4 +1,4 @@
-import os, sys
+import sys
 sys.path.insert(1, '../')
 import numpy as np
 import scipy as sc
