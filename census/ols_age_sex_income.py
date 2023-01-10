@@ -170,9 +170,9 @@ def make_intervals(df, true, axs):
     ci = df[(df["coefficient"] == "age") & (df["estimator"] == "prediction-powered")]
     ci = [ci["lb"].mean(), ci["ub"].mean()]
 
-    axs[0].plot([ci[0], ci[1]],[0.8,0.8], linewidth=10, color="#DAF3DA", path_effects=[pe.Stroke(linewidth=11, foreground="#71D26F"), pe.Normal()], label='prediction-powered')
-    axs[0].plot([ci_classical[0], ci_classical[1]],[0.5, 0.5], linewidth=10, color="#EEEDED", path_effects=[pe.Stroke(linewidth=11, foreground="#BFB9B9"), pe.Normal()],  label='no ML')
-    axs[0].plot([ci_naive[0], ci_naive[1]],[0.2, 0.2], linewidth=10, color="#FFEACC", path_effects=[pe.Stroke(linewidth=11, foreground="#FFCD82"), pe.Normal()],  label='naive ML')
+    axs[0].plot([ci[0], ci[1]],[0.8,0.8], linewidth=10, color="#DAF3DA", path_effects=[pe.Stroke(linewidth=11, offset=(-0.5,0), foreground="#71D26F"), pe.Stroke(linewidth=11, offset=(0.5,0), foreground="#71D26F"), pe.Normal()], label='prediction-powered', solid_capstyle="butt")
+    axs[0].plot([ci_classical[0], ci_classical[1]],[0.5, 0.5], linewidth=10, color="#EEEDED", path_effects=[pe.Stroke(linewidth=11, offset=(-0.5,0), foreground="#BFB9B9"), pe.Stroke(linewidth=11, offset=(0.5,0), foreground="#BFB9B9"), pe.Normal()],  label='no ML', solid_capstyle="butt")
+    axs[0].plot([ci_naive[0], ci_naive[1]],[0.2, 0.2], linewidth=10, color="#FFEACC", path_effects=[pe.Stroke(linewidth=11, offset=(-0.5,0), foreground="#FFCD82"), pe.Stroke(linewidth=11, offset=(0.5,0), foreground="#FFCD82"), pe.Normal()],  label='naive ML', solid_capstyle="butt")
     axs[0].vlines(true[0], ymin=0.0, ymax=1, linestyle="dotted", linewidth=3, label="ground truth", color="#F7AE7C")
     axs[0].set_xlabel("age coeff")
     axs[0].set_yticks([])
@@ -189,9 +189,9 @@ def make_intervals(df, true, axs):
     ci_classical = [ci_classical["lb"].mean(), ci_classical["ub"].mean()]
     ci = df[(df["coefficient"] == "sex") & (df["estimator"] == "prediction-powered")]
     ci = [ci["lb"].mean(), ci["ub"].mean()]
-    axs[1].plot([ci[0], ci[1]],[0.8,0.8], linewidth=10, color="#DAF3DA", path_effects=[pe.Stroke(linewidth=11, foreground="#71D26F"), pe.Normal()], label='prediction-powered')
-    axs[1].plot([ci_classical[0], ci_classical[1]],[0.5, 0.5], linewidth=10, color="#EEEDED", path_effects=[pe.Stroke(linewidth=11, foreground="#BFB9B9"), pe.Normal()],  label='no ML')
-    axs[1].plot([ci_naive[0], ci_naive[1]],[0.2, 0.2], linewidth=10, color="#FFEACC", path_effects=[pe.Stroke(linewidth=11, foreground="#FFCD82"), pe.Normal()],  label='naive ML')
+    axs[1].plot([ci[0], ci[1]],[0.8,0.8], linewidth=10, color="#DAF3DA", path_effects=[pe.Stroke(linewidth=11, offset=(-0.5,0), foreground="#71D26F"), pe.Stroke(linewidth=11, offset=(0.5,0), foreground="#71D26F"), pe.Normal()], label='prediction-powered', solid_capstyle="butt")
+    axs[1].plot([ci_classical[0], ci_classical[1]],[0.5, 0.5], linewidth=10, color="#EEEDED", path_effects=[pe.Stroke(linewidth=11, offset=(-0.5,0), foreground="#BFB9B9"), pe.Stroke(linewidth=11, offset=(0.5,0), foreground="#BFB9B9"), pe.Normal()],  label='no ML', solid_capstyle="butt")
+    axs[1].plot([ci_naive[0], ci_naive[1]],[0.2, 0.2], linewidth=10, color="#FFEACC", path_effects=[pe.Stroke(linewidth=11, offset=(-0.5,0), foreground="#FFCD82"), pe.Stroke(linewidth=11, offset=(0.5,0), foreground="#FFCD82"), pe.Normal()],  label='naive ML', solid_capstyle="butt")
     axs[1].vlines(true[1], ymin=0.0, ymax=1, linestyle="dotted", linewidth=3, label="ground truth", color="#F7AE7C")
     axs[1].set_xlabel("sex coeff")
     axs[1].set_yticks([])
