@@ -1,3 +1,7 @@
+import sys
+sys.path.insert(1, '../')
+from concentration import wsr_iid
+
 import numpy as np
 import math
 import multiprocess
@@ -128,7 +132,7 @@ def get_betting_wor_ci(x_n, N, alpha, grid_spacing, use_intersection: bool = Tru
 
 # odds ratio estimation based on finite sample mean estimation
 def get_odds_ratio_cis(df, ptm_name, n, alpha, grid_spacing: float = 1e-3,
-                       use_intersection: bool = True, verbose: bool = True,
+                       use_iid_approximation: bool = True, use_intersection: bool = True, verbose: bool = True,
                        parallelize: bool = False, n_cores: int = None, n_min: int = 20):
 
     # Z: df[ptm_name]
@@ -166,39 +170,52 @@ def get_odds_ratio_cis(df, ptm_name, n, alpha, grid_spacing: float = 1e-3,
 
     # ===== CIs on mu1 = P(Y = 1 | Z = 1) and mu0 = P(Y = 1 | Z = 0) =====
 
-    # ----- model-assisted CI -----
+    # ----- prediction-powered CI -----
 
-    # CI on mu1
     bias_lab_z1_n = lab_z1_df['disordered'].to_numpy() - lab_z1_df['pred_disordered'].to_numpy()
-    bias_z1_ci = get_betting_wor_ci(  # biases have values in {-1, 0, 1}, rescale to [0, 1]
-        (bias_lab_z1_n + 1) / 2, N_z1, alpha, grid_spacing, use_intersection=use_intersection,
-        parallelize=parallelize, n_cores=n_cores
-    )
-    bias_z1_ci = bias_z1_ci * 2 - 1  # rescale to [-1, 1]
-    f_mean_z1 = z1_df['pred_disordered'].mean()
-    mu1_mai_ci = (np.maximum(f_mean_z1 + bias_z1_ci[0], 0), np.minimum(f_mean_z1 + bias_z1_ci[1], 1))
-
-    # CI on mu0
     bias_lab_z0_n = lab_z0_df['disordered'].to_numpy() - lab_z0_df['pred_disordered'].to_numpy()
-    bias_z0_ci = get_betting_wor_ci(
-        (bias_lab_z0_n + 1) / 2, N_z0, alpha, grid_spacing, use_intersection=use_intersection,
-        parallelize=parallelize, n_cores=n_cores
-    )
+    if use_iid_approximation:
+        grid = np.arange(grid_spacing, 1, step=grid_spacing)
+        # biases have values in {-1, 0, 1}, rescale to [0, 1]
+        bias_z1_ci = wsr_iid((bias_lab_z1_n + 1) / 2, alpha / 2, grid, parallelize=parallelize, num_cpus=n_cores)
+        bias_z0_ci = wsr_iid((bias_lab_z0_n + 1) / 2, alpha / 2, grid, parallelize=parallelize, num_cpus=n_cores)
+    else:
+        bias_z1_ci = get_betting_wor_ci(
+            (bias_lab_z1_n + 1) / 2, N_z1, alpha / 2, grid_spacing, use_intersection=use_intersection,
+            parallelize=parallelize, n_cores=n_cores
+        )
+        bias_z0_ci = get_betting_wor_ci(
+            (bias_lab_z0_n + 1) / 2, N_z0, alpha / 2, grid_spacing, use_intersection=use_intersection,
+            parallelize=parallelize, n_cores=n_cores
+        )
+    bias_z1_ci = bias_z1_ci * 2 - 1  # rescale to [-1, 1]
     bias_z0_ci = bias_z0_ci * 2 - 1
+    f_mean_z1 = z1_df['pred_disordered'].mean()
     f_mean_z0 = z0_df['pred_disordered'].mean()
+    mu1_mai_ci = (np.maximum(f_mean_z1 + bias_z1_ci[0], 0), np.minimum(f_mean_z1 + bias_z1_ci[1], 1))
     mu0_mai_ci = (np.maximum(f_mean_z0 + bias_z0_ci[0], 0), np.minimum(f_mean_z0 + bias_z0_ci[1], 1))
+    if (mu1_mai_ci[1] < mu1_mai_ci[0]) or (mu0_mai_ci[1] < mu0_mai_ci[0]):
+        print(mu1_mai_ci)
+        print(mu0_mai_ci)
 
     # ----- classical CI (using only labeled data) -----
     y_z1_n = lab_z1_df['disordered'].to_numpy()
     y_z0_n = lab_z0_df['disordered'].to_numpy()
-    mu1_cla_ci = get_betting_wor_ci(
-        y_z1_n, N_z1, alpha, grid_spacing, use_intersection=use_intersection,
-        parallelize=parallelize, n_cores=n_cores
-    )
-    mu0_cla_ci = get_betting_wor_ci(
-        y_z0_n, N_z0, alpha, grid_spacing, use_intersection=use_intersection,
-        parallelize=parallelize, n_cores=n_cores
-    )
+    if use_iid_approximation:
+        mu1_cla_ci = wsr_iid(y_z1_n, alpha / 2, grid, parallelize=parallelize, num_cpus=n_cores)
+        mu0_cla_ci = wsr_iid(y_z0_n, alpha / 2, grid, parallelize=parallelize, num_cpus=n_cores)
+    else:
+        mu1_cla_ci = get_betting_wor_ci(
+            y_z1_n, N_z1, alpha / 2, grid_spacing, use_intersection=use_intersection,
+            parallelize=parallelize, n_cores=n_cores
+        )
+        mu0_cla_ci = get_betting_wor_ci(
+            y_z0_n, N_z0, alpha / 2, grid_spacing, use_intersection=use_intersection,
+            parallelize=parallelize, n_cores=n_cores
+        )
+    if (mu1_cla_ci[1] < mu1_cla_ci[0]) or (mu0_cla_ci[1] < mu0_cla_ci[0]):
+        print(mu1_cla_ci)
+        print(mu0_cla_ci)
 
     # ===== CIs on odds ratio =====
 

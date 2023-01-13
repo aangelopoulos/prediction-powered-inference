@@ -9,11 +9,12 @@ import matplotlib.patheffects as pe
 import seaborn as sns
 import pandas as pd
 
+import scipy
 from scipy.optimize import brentq
 from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import make_pipeline
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import OneHotEncoder
 import xgboost as xgb
 from hyperopt import STATUS_OK, Trials, fmin, hp, tpe
 from tqdm import tqdm
@@ -21,19 +22,6 @@ from tqdm import tqdm
 from concentration import ols, standard_ols_interval, pp_ols_interval
 
 import pdb
-
-def travel_time_filter(data):
-    """
-    Filters for the employment prediction task
-    """
-    df = data
-    df = df[df['AGEP'] > 16]
-    df = df[df['PWGTP'] >= 1]
-    df = df[df['ESR'] == 1]
-    return df
-
-def combined_filter(data):
-    return travel_time_filter(folktables.adult_filter(data))
 
 def get_data(year,features,outcome, randperm=True):
     # Predict income and regress to time to work
@@ -47,47 +35,6 @@ def get_data(year,features,outcome, randperm=True):
         income_features, income, employed = income_features.iloc[shuffler], income.iloc[shuffler], employed[shuffler]
     return income_features, income, employed
 
-def train_eval_regressor(features, outcome, ft, add_bias=True):
-    X_train, X_test, y_train, y_test = train_test_split(features, outcome, test_size=0.2)
-    pdb.set_trace()
-    dtrain = xgb.DMatrix(X_train, label=y_train, feature_types=ft, enable_categorical=True)
-    dtest = xgb.DMatrix(X_test, label=y_test, feature_types=ft, enable_categorical=True)
-    num_round = 1000
-
-    lossfns = ['reg:squarederror', 'reg:pseudohubererror']
-
-    # TODO: Fix this
-    space={
-           'max_depth': hp.choice('max_depth', np.arange(3, 30+1, dtype=int)),
-           'eta': hp.uniform('eta', 0, 1),
-           'objective': hp.choice('objective', lossfns)
-          }
-
-    evallist = [(dtest, 'eval'), (dtrain, 'train')]
-
-    def objective(params):
-        tree = xgb.train(params, dtrain, num_round, evallist)
-        print(params)
-
-        pred = tree.predict(dtest)
-        std = np.std(y_test - pred)
-        return {'loss': std, 'status': STATUS_OK }
-
-    trials = Trials()
-
-    #best_hyperparams = fmin(fn = objective,
-    #                        space = space,
-    #                        algo = tpe.suggest,
-    #                        max_evals = 100,
-    #                        trials = trials)
-
-    #print(best_hyperparams)
-    #best_hyperparams['objective'] = lossfns[best_hyperparams['objective']]
-    #tree = xgb.train(best_hyperparams, dtrain, num_round, evallist)
-    tree = xgb.train({'eta': 0.8, 'max_depth': 30, 'objective': 'reg:pseudohubererror'}, dtrain, 10000, evallist)
-    return tree
-
-
 def plot_data(age,income,sex):
     plt.figure(figsize=(7.5,2.5))
     sns.set_theme(style="white", palette="pastel", font_scale=1.5)
@@ -98,32 +45,37 @@ def plot_data(age,income,sex):
     plt.ylabel('income ($)')
     sns.despine(top=True, right=True)
     plt.tight_layout()
+    os.makedirs("./ols-plots", exist_ok=True)
     plt.savefig("./ols-plots/raw_data.pdf")
 
-def get_tree(year, features, feature_types):
+def transform_features(features, ft, enc=None):
+    c_features = features.T[ft == "c"].T.astype(str)
+    if enc is None:
+        enc = OneHotEncoder(handle_unknown='ignore', drop='if_binary', sparse=False)
+        enc.fit(c_features)
+    c_features = enc.transform(c_features)
+    features = scipy.sparse.csc_matrix(np.concatenate([features.T[ft == "q"].T.astype(float), c_features], axis=1))
+    return features, enc
+
+def train_eval_regressor(features, outcome, add_bias=True):
+    X_train, X_test, y_train, y_test = train_test_split(features, outcome, test_size=0.2)
+    dtrain = xgb.DMatrix(X_train, label=y_train)
+    dtest = xgb.DMatrix(X_test, label=y_test)
+    evallist = [(dtest, 'eval'), (dtrain, 'train')]
+
+    tree = xgb.train({'eta': 0.3, 'max_depth': 7, 'objective': 'reg:pseudohubererror'}, dtrain, 10000, evallist)
+    return tree
+    
+def get_tree(year, features, ft, enc=None):
     try:
         income_tree = xgb.Booster()
         income_tree.load_model(f"./.cache/ols-model{year}.json")
     except:
         income_features, income, employed = get_data(year=year, features=features, outcome='PINCP')
-        income_tree = train_eval_regressor(income_features.to_numpy(), income_2017.to_numpy())
+        income_tree = train_eval_regressor(transform_features(income_features, ft, enc)[0], income.to_numpy())
         os.makedirs("./.cache/", exist_ok=True)
         income_tree.save_model(f"./.cache/ols-model{year}.json")
     return income_tree
-
-def trial(ols_features_2018, income_2018, predicted_income_2018, n, alpha):
-    X_labeled, X_unlabeled, Y_labeled, Y_unlabeled, Yhat_labeled, Yhat_unlabeled = train_test_split(ols_features_2018, income_2018, predicted_income_2018, train_size=n)
-    X = np.concatenate([X_labeled, X_unlabeled],axis=0)
-
-    Yhat = np.concatenate([Yhat_labeled, Yhat_unlabeled], axis=0)
-
-    naive_interval = standard_ols_interval(X, Yhat, alpha, sandwich=False)
-
-    classical_interval = standard_ols_interval(X_labeled, Y_labeled, alpha, sandwich=False)
-
-    pp_interval = pp_ols_interval(X_labeled, X_unlabeled, Y_labeled, Yhat_labeled, Yhat_unlabeled, alpha, sandwich=False)
-
-    return naive_interval, classical_interval, pp_interval
 
 def make_plots(df, true):
     # Line plots
@@ -140,7 +92,8 @@ def make_plots(df, true):
     make_lineplots(df, axs[2,:])
 
     plt.tight_layout()
-    plt.savefig('./ols-plots/results.pdf')
+    os.makedirs("./ols-plots", exist_ok=True)
+    plt.savefig("./ols-plots/results.pdf")
 
 def make_lineplots(df, axs):
     plot_df = df[["coefficient", "estimator","width", "n"]].groupby(["coefficient", "estimator","n"], group_keys=False).mean()["width"].reset_index()
@@ -168,8 +121,8 @@ def make_intervals(df, true, axs):
     ci = [ci["lb"].mean(), ci["ub"].mean()]
 
     axs[0].plot([ci[0], ci[1]],[0.8,0.8], linewidth=10, color="#DAF3DA", path_effects=[pe.Stroke(linewidth=11, offset=(-0.5,0), foreground="#71D26F"), pe.Stroke(linewidth=11, offset=(0.5,0), foreground="#71D26F"), pe.Normal()], label='prediction-powered', solid_capstyle="butt")
-    axs[0].plot([ci_classical[0], ci_classical[1]],[0.5, 0.5], linewidth=10, color="#EEEDED", path_effects=[pe.Stroke(linewidth=11, offset=(-0.5,0), foreground="#BFB9B9"), pe.Stroke(linewidth=11, offset=(0.5,0), foreground="#BFB9B9"), pe.Normal()],  label='no ML', solid_capstyle="butt")
-    axs[0].plot([ci_naive[0], ci_naive[1]],[0.2, 0.2], linewidth=10, color="#FFEACC", path_effects=[pe.Stroke(linewidth=11, offset=(-0.5,0), foreground="#FFCD82"), pe.Stroke(linewidth=11, offset=(0.5,0), foreground="#FFCD82"), pe.Normal()],  label='naive ML', solid_capstyle="butt")
+    axs[0].plot([ci_classical[0], ci_classical[1]],[0.5, 0.5], linewidth=10, color="#EEEDED", path_effects=[pe.Stroke(linewidth=11, offset=(-0.5,0), foreground="#BFB9B9"), pe.Stroke(linewidth=11, offset=(0.5,0), foreground="#BFB9B9"), pe.Normal()],  label='classical', solid_capstyle="butt")
+    axs[0].plot([ci_naive[0], ci_naive[1]],[0.2, 0.2], linewidth=10, color="#FFEACC", path_effects=[pe.Stroke(linewidth=11, offset=(-0.5,0), foreground="#FFCD82"), pe.Stroke(linewidth=11, offset=(0.5,0), foreground="#FFCD82"), pe.Normal()],  label='imputed', solid_capstyle="butt")
     axs[0].vlines(true[0], ymin=0.0, ymax=1, linestyle="dotted", linewidth=3, label="ground truth", color="#F7AE7C")
     axs[0].set_xlabel("age coeff")
     axs[0].set_yticks([])
@@ -187,8 +140,8 @@ def make_intervals(df, true, axs):
     ci = df[(df["coefficient"] == "sex") & (df["estimator"] == "prediction-powered")]
     ci = [ci["lb"].mean(), ci["ub"].mean()]
     axs[1].plot([ci[0], ci[1]],[0.8,0.8], linewidth=10, color="#DAF3DA", path_effects=[pe.Stroke(linewidth=11, offset=(-0.5,0), foreground="#71D26F"), pe.Stroke(linewidth=11, offset=(0.5,0), foreground="#71D26F"), pe.Normal()], label='prediction-powered', solid_capstyle="butt")
-    axs[1].plot([ci_classical[0], ci_classical[1]],[0.5, 0.5], linewidth=10, color="#EEEDED", path_effects=[pe.Stroke(linewidth=11, offset=(-0.5,0), foreground="#BFB9B9"), pe.Stroke(linewidth=11, offset=(0.5,0), foreground="#BFB9B9"), pe.Normal()],  label='no ML', solid_capstyle="butt")
-    axs[1].plot([ci_naive[0], ci_naive[1]],[0.2, 0.2], linewidth=10, color="#FFEACC", path_effects=[pe.Stroke(linewidth=11, offset=(-0.5,0), foreground="#FFCD82"), pe.Stroke(linewidth=11, offset=(0.5,0), foreground="#FFCD82"), pe.Normal()],  label='naive ML', solid_capstyle="butt")
+    axs[1].plot([ci_classical[0], ci_classical[1]],[0.5, 0.5], linewidth=10, color="#EEEDED", path_effects=[pe.Stroke(linewidth=11, offset=(-0.5,0), foreground="#BFB9B9"), pe.Stroke(linewidth=11, offset=(0.5,0), foreground="#BFB9B9"), pe.Normal()],  label='classical', solid_capstyle="butt")
+    axs[1].plot([ci_naive[0], ci_naive[1]],[0.2, 0.2], linewidth=10, color="#FFEACC", path_effects=[pe.Stroke(linewidth=11, offset=(-0.5,0), foreground="#FFCD82"), pe.Stroke(linewidth=11, offset=(0.5,0), foreground="#FFCD82"), pe.Normal()],  label='imputed', solid_capstyle="butt")
     axs[1].vlines(true[1], ymin=0.0, ymax=1, linestyle="dotted", linewidth=3, label="ground truth", color="#F7AE7C")
     axs[1].set_xlabel("sex coeff")
     axs[1].set_yticks([])
@@ -217,7 +170,6 @@ def make_histograms(df, axs):
     axs[1].set_yticklabels([])
     kde1.get_legend().remove()
     sns.despine(ax=axs[1],top=True,right=True,left=True)
-    #plt.tight_layout()
 
     cvg_classical_age = (df[(df["estimator"]=="classical") & (df["coefficient"]=="age")]["covered"]).astype(int).mean()
     cvg_classical_sex = (df[(df["estimator"]=="classical") & (df["coefficient"]=="sex")]["covered"]).astype(int).mean()
@@ -225,59 +177,3 @@ def make_histograms(df, axs):
     cvg_predictionpowered_sex = (df[(df["estimator"]=="prediction-powered") & (df["coefficient"]=="sex")]["covered"]).astype(int).mean()
 
     print(f"Classical coverage ({cvg_classical_age},{cvg_classical_sex}), prediction-powered ({cvg_predictionpowered_age},{cvg_predictionpowered_sex})")
-
-if __name__ == "__main__":
-    os.makedirs('./ols-plots', exist_ok=True)
-    pdb.set_trace()
-    features = ['AGEP','SCHL','MAR','RELP','DIS','ESP','CIT','MIG','MIL','ANC1P','NATIVITY','DEAR','DEYE','DREM','SEX','RAC1P', 'SOCP', 'COW']
-    ft = ["q", "q", "c", "c", "c", "c", "c", "c", "c", "c", "c", "c", "c",, "c", "c", "c", "c", "c", "c"]
-    income_features_2018, income_2018, employed_2018 = get_data(year=2018, features=features, outcome='PINCP')
-    age_2018 = income_features_2018['AGEP'].to_numpy()
-    income_2018 = income_2018.to_numpy()
-    sex_2018 = income_features_2018['SEX'].to_numpy()
-    income_features_2018 = income_features_2018.to_numpy()
-    plot_data(age_2018, income_2018, sex_2018)
-
-    # OLS solution
-    ols_features_2018 = np.stack([age_2018, sex_2018], axis=1)
-    true = ols(ols_features_2018, income_2018)
-
-    try:
-        df = pd.read_pickle('./.cache/ols-results.pkl')
-    except:
-        # Train tree on 2017 data
-        np.random.seed(0) # Fix seed for tree
-        income_tree = get_tree()
-        np.random.seed(0) # Fix seed for evaluation
-
-        # Evaluate Tree
-        predicted_income_2018 = income_tree.predict(xgb.DMatrix(income_features_2018))
-
-        # Collect OLS features and do MAI
-        print(f"True OLS coefficients: {true}")
-        N = ols_features_2018.shape[0]
-        num_n = 50
-        ns = np.linspace(2000, 5000, num_n).astype(int)
-        num_trials = 500
-        alpha = 0.05
-
-        # Store results
-        columns = ["lb","ub","covered","estimator","coefficient","n"]
-
-        results = []
-        for i in tqdm(range(num_trials)):
-            for j in range(ns.shape[0]):
-                n = ns[j]
-                ii, ci, ppi = trial(ols_features_2018, income_2018, predicted_income_2018, n, alpha)
-                temp_df = pd.DataFrame(np.zeros((6,len(columns))), columns=columns)
-                temp_df.loc[0] = ii[0][0], ii[1][0], (ii[0][0] <= true[0]) & (true[0] <= ii[1][0]), "naive", "age", n
-                temp_df.loc[1] = ci[0][0], ci[1][0], (ci[0][0] <= true[0]) & (true[0] <= ci[1][0]), "classical", "age", n
-                temp_df.loc[2] = ppi[0][0], ppi[1][0], (ppi[0][0] <= true[0]) & (true[0] <= ppi[1][0]), "prediction-powered", "age", n
-                temp_df.loc[3] = ii[0][1], ii[1][1], (ii[0][1] <= true[1]) & (true[1] <= ii[1][1]), "naive", "sex", n
-                temp_df.loc[4] = ci[0][1], ci[1][1], (ci[0][1] <= true[1]) & (true[1] <= ci[1][1]), "classical", "sex", n
-                temp_df.loc[5] = ppi[0][1], ppi[1][1], (ppi[0][1] <= true[1]) & (true[1] <= ppi[1][1]), "prediction-powered", "sex", n
-                results += [temp_df]
-        df = pd.concat(results)
-        df["width"] = df["ub"] - df["lb"]
-        df.to_pickle('./.cache/ols-results.pkl')
-    make_plots(df, true)
