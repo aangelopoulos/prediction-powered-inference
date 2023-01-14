@@ -97,14 +97,14 @@ def make_plots(df, true):
 
 def make_lineplots(df, axs):
     plot_df = df[["coefficient", "estimator","width", "n"]].groupby(["coefficient", "estimator","n"], group_keys=False).mean()["width"].reset_index()
-    lplt = sns.lineplot(data=plot_df[(plot_df["coefficient"] == "age") & (plot_df["estimator"] != "naive")], x="n", y="width", hue="estimator", ax=axs[0], hue_order=["prediction-powered", "classical"])
+    lplt = sns.lineplot(data=plot_df[(plot_df["coefficient"] == "age") & (plot_df["estimator"] != "imputed")], x="n", y="width", hue="estimator", ax=axs[0], hue_order=["prediction-powered", "classical"])
     axs[0].set_ylabel("mean width ($/yr)")
     axs[0].set_xlabel("n")
     axs[0].xaxis.set_tick_params()
     axs[0].yaxis.set_tick_params()
     sns.despine(ax=axs[0],top=True,right=True)
     lplt.get_legend().remove()
-    lplt = sns.lineplot(data=plot_df[(plot_df["coefficient"] == "sex") & (plot_df["estimator"] != "naive")], x="n", y="width", hue="estimator", ax=axs[1], hue_order=["prediction-powered", "classical"])
+    lplt = sns.lineplot(data=plot_df[(plot_df["coefficient"] == "sex") & (plot_df["estimator"] != "imputed")], x="n", y="width", hue="estimator", ax=axs[1], hue_order=["prediction-powered", "classical"])
     axs[1].set_ylabel("mean width ($)")
     axs[1].set_xlabel("n")
     axs[1].xaxis.set_tick_params()
@@ -113,8 +113,8 @@ def make_lineplots(df, axs):
     lplt.get_legend().remove()
 
 def make_intervals(df, true, axs):
-    ci_naive = df[(df["coefficient"] == "age") & (df["estimator"] == "naive")]
-    ci_naive = [ci_naive["lb"].mean(), ci_naive["ub"].mean()]
+    ci_imputed = df[(df["coefficient"] == "age") & (df["estimator"] == "imputed")]
+    ci_imputed = [ci_imputed["lb"].mean(), ci_imputed["ub"].mean()]
     ci_classical = df[(df["coefficient"] == "age") & (df["estimator"] == "classical")]
     ci_classical = [ci_classical["lb"].mean(), ci_classical["ub"].mean()]
     ci = df[(df["coefficient"] == "age") & (df["estimator"] == "prediction-powered")]
@@ -122,7 +122,7 @@ def make_intervals(df, true, axs):
 
     axs[0].plot([ci[0], ci[1]],[0.8,0.8], linewidth=10, color="#DAF3DA", path_effects=[pe.Stroke(linewidth=11, offset=(-0.5,0), foreground="#71D26F"), pe.Stroke(linewidth=11, offset=(0.5,0), foreground="#71D26F"), pe.Normal()], label='prediction-powered', solid_capstyle="butt")
     axs[0].plot([ci_classical[0], ci_classical[1]],[0.5, 0.5], linewidth=10, color="#EEEDED", path_effects=[pe.Stroke(linewidth=11, offset=(-0.5,0), foreground="#BFB9B9"), pe.Stroke(linewidth=11, offset=(0.5,0), foreground="#BFB9B9"), pe.Normal()],  label='classical', solid_capstyle="butt")
-    axs[0].plot([ci_naive[0], ci_naive[1]],[0.2, 0.2], linewidth=10, color="#FFEACC", path_effects=[pe.Stroke(linewidth=11, offset=(-0.5,0), foreground="#FFCD82"), pe.Stroke(linewidth=11, offset=(0.5,0), foreground="#FFCD82"), pe.Normal()],  label='imputed', solid_capstyle="butt")
+    axs[0].plot([ci_imputed[0], ci_imputed[1]],[0.2, 0.2], linewidth=10, color="#FFEACC", path_effects=[pe.Stroke(linewidth=11, offset=(-0.5,0), foreground="#FFCD82"), pe.Stroke(linewidth=11, offset=(0.5,0), foreground="#FFCD82"), pe.Normal()],  label='imputed', solid_capstyle="butt")
     axs[0].vlines(true[0], ymin=0.0, ymax=1, linestyle="dotted", linewidth=3, label="ground truth", color="#F7AE7C")
     axs[0].set_xlabel("age coeff")
     axs[0].set_yticks([])
@@ -133,15 +133,15 @@ def make_intervals(df, true, axs):
     sns.despine(ax=axs[0],top=True,right=True,left=True)
 
     # Sex coeff
-    ci_naive = df[(df["coefficient"] == "sex") & (df["estimator"] == "naive")]
-    ci_naive = [ci_naive["lb"].mean(), ci_naive["ub"].mean()]
+    ci_imputed = df[(df["coefficient"] == "sex") & (df["estimator"] == "imputed")]
+    ci_imputed = [ci_imputed["lb"].mean(), ci_imputed["ub"].mean()]
     ci_classical = df[(df["coefficient"] == "sex") & (df["estimator"] == "classical")]
     ci_classical = [ci_classical["lb"].mean(), ci_classical["ub"].mean()]
     ci = df[(df["coefficient"] == "sex") & (df["estimator"] == "prediction-powered")]
     ci = [ci["lb"].mean(), ci["ub"].mean()]
     axs[1].plot([ci[0], ci[1]],[0.8,0.8], linewidth=10, color="#DAF3DA", path_effects=[pe.Stroke(linewidth=11, offset=(-0.5,0), foreground="#71D26F"), pe.Stroke(linewidth=11, offset=(0.5,0), foreground="#71D26F"), pe.Normal()], label='prediction-powered', solid_capstyle="butt")
     axs[1].plot([ci_classical[0], ci_classical[1]],[0.5, 0.5], linewidth=10, color="#EEEDED", path_effects=[pe.Stroke(linewidth=11, offset=(-0.5,0), foreground="#BFB9B9"), pe.Stroke(linewidth=11, offset=(0.5,0), foreground="#BFB9B9"), pe.Normal()],  label='classical', solid_capstyle="butt")
-    axs[1].plot([ci_naive[0], ci_naive[1]],[0.2, 0.2], linewidth=10, color="#FFEACC", path_effects=[pe.Stroke(linewidth=11, offset=(-0.5,0), foreground="#FFCD82"), pe.Stroke(linewidth=11, offset=(0.5,0), foreground="#FFCD82"), pe.Normal()],  label='imputed', solid_capstyle="butt")
+    axs[1].plot([ci_imputed[0], ci_imputed[1]],[0.2, 0.2], linewidth=10, color="#FFEACC", path_effects=[pe.Stroke(linewidth=11, offset=(-0.5,0), foreground="#FFCD82"), pe.Stroke(linewidth=11, offset=(0.5,0), foreground="#FFCD82"), pe.Normal()],  label='imputed', solid_capstyle="butt")
     axs[1].vlines(true[1], ymin=0.0, ymax=1, linestyle="dotted", linewidth=3, label="ground truth", color="#F7AE7C")
     axs[1].set_xlabel("sex coeff")
     axs[1].set_yticks([])
@@ -155,7 +155,7 @@ def make_intervals(df, true, axs):
 
 def make_histograms(df, axs):
     # Width figure
-    kde0 = sns.kdeplot(df[(df["coefficient"]=="age") & (df["estimator"] != "naive")], ax=axs[0], x="width", hue="estimator", hue_order=["prediction-powered", "classical"], fill=True, clip=(0,None), cut=0)
+    kde0 = sns.kdeplot(df[(df["coefficient"]=="age") & (df["estimator"] != "imputed")], ax=axs[0], x="width", hue="estimator", hue_order=["prediction-powered", "classical"], fill=True, clip=(0,None), cut=0)
     axs[0].set_ylabel("")
     axs[0].set_xlabel("width (age coeff, $/yr)")
     axs[0].set_yticks([])
@@ -163,7 +163,7 @@ def make_histograms(df, axs):
     kde0.get_legend().remove()
     sns.despine(ax=axs[0],top=True,right=True,left=True)
 
-    kde1 = sns.kdeplot(df[(df["coefficient"]=="age") & (df["estimator"] != "naive")], ax=axs[1], x="width", hue="estimator", hue_order=["prediction-powered", "classical"], fill=True, clip=(0,None), cut=0)
+    kde1 = sns.kdeplot(df[(df["coefficient"]=="age") & (df["estimator"] != "imputed")], ax=axs[1], x="width", hue="estimator", hue_order=["prediction-powered", "classical"], fill=True, clip=(0,None), cut=0)
     axs[1].set_ylabel("")
     axs[1].set_xlabel("width (sex coeff, $)")
     axs[1].set_yticks([])
