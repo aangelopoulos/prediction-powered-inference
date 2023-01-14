@@ -105,7 +105,6 @@ def standard_ols_interval(X, Y, alpha, return_halfwidth=False, sandwich=True):
     if return_halfwidth:
         return halfwidth
     else:
-        print(f"standard: {halfwidth}")
         return thetahat - halfwidth, thetahat + halfwidth
 
 def pp_ols_interval(X_labeled, X_unlabeled, Y_labeled, Yhat_labeled, Yhat_unlabeled, alpha, sandwich=True):
@@ -117,7 +116,6 @@ def pp_ols_interval(X_labeled, X_unlabeled, Y_labeled, Yhat_labeled, Yhat_unlabe
     hw_tildef = standard_ols_interval(X_unlabeled, Yhat_unlabeled, 0.001*alpha, return_halfwidth=True, sandwich=sandwich)
     hw_rectifier = standard_ols_interval(X_labeled, Y_labeled-Yhat_labeled, 0.999*alpha, return_halfwidth=True, sandwich=sandwich)
     halfwidth = hw_tildef + hw_rectifier
-    print(f"pp: {halfwidth}")
     return pp_thetahat - halfwidth, pp_thetahat + halfwidth
 
 """
@@ -126,18 +124,6 @@ def pp_ols_interval(X_labeled, X_unlabeled, Y_labeled, Yhat_labeled, Yhat_unlabe
 def logistic(X, y):
     clf = LogisticRegression(penalty='none').fit(X,y)
     return clf.coef_.squeeze()
-
-#def logistic(X, XTyN, lr=1e-11, iters=100000, init=np.array([2.09549571e-05, -1.94014661e-08])): # Takes X and X.T@Y/N where N = X.shape[0]
-#    betahat = init
-#    N = X.shape[0]
-#    for epoch in range(iters):
-#        p = expit(X@betahat) # This is equal to 1./(1. + np.exp(-X@betahat))
-#        grad = (X.T@p)/N - XTyN
-#        print(epoch, grad, betahat)
-#        betahat = betahat - lr*grad
-#    if grad.max() > 1e-3:
-#        print("Warning: gradient is still large.")
-#    return betahat
 
 def product(*args, **kwds):
     # product('ABCD', 'xy') --> Ax Ay Bx By Cx Cy Dx Dy
