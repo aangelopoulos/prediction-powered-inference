@@ -43,9 +43,10 @@ def get_classical_ci(y_n, q, alpha, y_lb: float = -np.inf, y_ub: float = np.inf)
         ub = y_ub
     return lb, ub
 
-def trial(y_all, f_all, q, n, alpha, delta, theta_grid, eps: float = 1e-3, c: float = 0.75, n_train: int = 10):
+def get_quantile_intervals(y_all, f_all, q, n, alpha, theta_grid_spacing: float = 0.1, rect_grid_spacing: float = 1e-3,
+                           n_train: int = 5):
     y_n, y_N, f_n, f_N = train_test_split(y_all, f_all, train_size=n)
-    ci_cl = get_classical_ci(y_n, q, alpha)
+    ci_cl = get_classical_ci(y_n, q, alpha)  # classical CI on quantile
 
     if n_train:
         # fit median regressor with handful of labeled data points
@@ -60,32 +61,38 @@ def trial(y_all, f_all, q, n, alpha, delta, theta_grid, eps: float = 1e-3, c: fl
         assert(f_n.shape == y_n.shape)
         assert(f_N.shape == y_N.shape)
 
-    # construct confidence intervals on rectifier per candidate theta
-    Rci_t = [
-        wsr_iid(((f_n <= theta).astype(float) - (y_n <= theta).astype(float) + 1) / 2,  # rescale into [0, 1]
-                delta, np.arange(eps, 1, eps), parallelize=False, c=c) * 2 - 1 for theta in theta_grid
-    ]
-    fcdf_t = [(f_N <= theta).mean() for theta in theta_grid]
-    # hoeffding term
-    hoeff =  np.sqrt(np.log(2 / (alpha - delta)) / (2 * f_N.size))
+    # ===== construct prediction-powered CIs on quantile =====
 
-    include_t = np.array(
-        [(q + Rci_t[t][0] - hoeff <= fcdf_t[t]) & (q + Rci_t[t][1] + hoeff >= fcdf_t[t]) for t in range(theta_grid.size)]
-    )
-    if np.sum(include_t) < 2:
-        idx = np.argmin(
-            [np.minimum((q + Rci_t[t][0] - hoeff) - fcdf_t[t], fcdf_t[t] - (q + Rci_t[t][1] + hoeff)) for t in range(theta_grid.size)]
-        )
-        if idx == 0:
+    theta_grid = np.arange(np.min(y_n), np.max(y_n), theta_grid_spacing)
+    rect_t = np.empty([theta_grid.size])
+    F_t = np.empty([theta_grid.size])
+    sigma2rect_t = np.empty([theta_grid.size])
+    sigma2f_t = np.empty([theta_grid.size])
+    w_t = np.empty([theta_grid.size])
+
+    # construct confidence intervals on rectifier per candidate value
+    for t, theta in enumerate(theta_grid):
+        gdiff_n = (f_n <= theta).astype(float) - (y_n <= theta).astype(float)
+        rect_t[t] = gdiff_n.mean()
+        fcdf_N = f_N <= theta
+        F_t[t] = fcdf_N.mean()
+        sigma2rect_t[t] = np.mean(np.square(gdiff_n - rect_t[t]))
+        sigma2f_t[t] = np.mean(np.square(fcdf_N - F_t[t]))
+        w_t[t] = sc.stats.norm.ppf(1 - alpha / 2) * np.sqrt(sigma2rect_t[t] / f_n.size + sigma2f_t[t] / f_N.size)
+
+    # include all candidate values for which rectifier value of 0 is in rectifier confidence interval
+    include_idx = np.where(np.abs(F_t - rect_t - q) <= w_t)[0]
+    if include_idx.size == 0:  # edge case if no candidates qualify
+        include_idx = np.argmin(np.abs(F_t - rect_t - q))
+        if include_idx == 0:
             ci_pp = np.array([theta_grid[0], theta_grid[1]])
         else:
-            ci_pp = np.array([theta_grid[idx - 1], theta_grid[idx]])
+            ci_pp = np.array([theta_grid[include_idx - 1], theta_grid[include_idx]])
     else:
-        ci_pp = theta_grid[np.where(include_t)[0]]
+        ci_pp = theta_grid[include_idx]
         ci_pp = np.array([ci_pp.min(), ci_pp.max()])
 
+    # ===== true (finite population) quantity =====
     true_quantile = get_quantile(y_all, q)
-    cov_cl = (ci_cl[0] <= true_quantile) & (ci_cl[1] >= true_quantile)
-    cov_pp = (ci_pp[0] <= true_quantile) & (ci_pp[1] >= true_quantile)
 
-    return ci_pp, ci_cl, cov_pp, cov_cl
+    return true_quantile, ci_pp, ci_cl

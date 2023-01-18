@@ -131,9 +131,7 @@ def get_betting_wor_ci(x_n, N, alpha, grid_spacing, use_intersection: bool = Tru
     return np.array([np.maximum(l, l_logical), np.minimum(u, u_logical)])
 
 
-# TODO for IID: fix WSR version to not double dip labeled and split error budget,
-# implement CLT version where do not split error budget
-def get_odds_ratio_intervals(df, ptm_name, n, alpha, delta_frac: float = 0.1, use_clt: bool = False,
+def get_odds_ratio_intervals(df, ptm_name, n, alpha, delta_frac: float = 0.1, use_clt: bool = True,
                              grid_spacing: float = 1e-3, use_iid_approximation: bool = True,
                              use_intersection: bool = True, verbose: bool = True,
                              parallelize: bool = False, n_cores: int = None, n_min: int = 20):
