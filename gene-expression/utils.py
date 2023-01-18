@@ -43,11 +43,8 @@ def get_classical_ci(y_n, q, alpha, y_lb: float = -np.inf, y_ub: float = np.inf)
         ub = y_ub
     return lb, ub
 
-def get_quantile_intervals(y_all, f_all, q, n, alpha, theta_grid_spacing: float = 0.1, rect_grid_spacing: float = 1e-3,
-                           n_train: int = 5):
+def get_quantile_intervals(y_all, f_all, q, n, alpha, theta_grid_spacing: float = 0.1, n_train: int = 5):
     y_n, y_N, f_n, f_N = train_test_split(y_all, f_all, train_size=n)
-    ci_cl = get_classical_ci(y_n, q, alpha)  # classical CI on quantile
-
     if n_train:
         # fit median regressor with handful of labeled data points
         predictor = QuantileRegressor(quantile=0.5, alpha=1e-6)
@@ -63,22 +60,24 @@ def get_quantile_intervals(y_all, f_all, q, n, alpha, theta_grid_spacing: float 
 
     # ===== construct prediction-powered CIs on quantile =====
 
-    theta_grid = np.arange(np.min(y_n), np.max(y_n), theta_grid_spacing)
-    rect_t = np.empty([theta_grid.size])
+    # ----- prediction-powered interval -----
+    theta_min = np.min([np.min(y_n), np.min(f_N), np.min(f_n)])
+    theta_max = np.max([np.max(y_n), np.max(f_N), np.max(f_n)])
+    theta_grid = np.arange(theta_min, theta_max, theta_grid_spacing)
     F_t = np.empty([theta_grid.size])
-    sigma2rect_t = np.empty([theta_grid.size])
-    sigma2f_t = np.empty([theta_grid.size])
+    rect_t = np.empty([theta_grid.size])
     w_t = np.empty([theta_grid.size])
 
     # construct confidence intervals on rectifier per candidate value
+    z = sc.stats.norm.ppf(1 - alpha / 2)
     for t, theta in enumerate(theta_grid):
         gdiff_n = (f_n <= theta).astype(float) - (y_n <= theta).astype(float)
         rect_t[t] = gdiff_n.mean()
-        fcdf_N = f_N <= theta
+        fcdf_N = (f_N <= theta).astype(float)
         F_t[t] = fcdf_N.mean()
-        sigma2rect_t[t] = np.mean(np.square(gdiff_n - rect_t[t]))
-        sigma2f_t[t] = np.mean(np.square(fcdf_N - F_t[t]))
-        w_t[t] = sc.stats.norm.ppf(1 - alpha / 2) * np.sqrt(sigma2rect_t[t] / f_n.size + sigma2f_t[t] / f_N.size)
+        sigma2rect = np.mean(np.square(gdiff_n - rect_t[t]))
+        sigma2f = np.mean(np.square(fcdf_N - F_t[t]))
+        w_t[t] = z * np.sqrt((sigma2rect / f_n.size) + (sigma2f / f_N.size))
 
     # include all candidate values for which rectifier value of 0 is in rectifier confidence interval
     include_idx = np.where(np.abs(F_t - rect_t - q) <= w_t)[0]
@@ -91,6 +90,9 @@ def get_quantile_intervals(y_all, f_all, q, n, alpha, theta_grid_spacing: float 
     else:
         ci_pp = theta_grid[include_idx]
         ci_pp = np.array([ci_pp.min(), ci_pp.max()])
+
+    # ----- classical CI on quantile -----
+    ci_cl = get_classical_ci(y_n, q, alpha)
 
     # ===== true (finite population) quantity =====
     true_quantile = get_quantile(y_all, q)
