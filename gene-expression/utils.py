@@ -2,7 +2,6 @@ import sys
 sys.path.insert(1, '../')
 import numpy as np
 import scipy as sc
-from concentration import wsr_iid
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import QuantileRegressor
 
