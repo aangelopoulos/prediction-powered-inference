@@ -9,7 +9,7 @@ from joblib import delayed, Parallel
 import pdb
 
 """
-    IID
+    IID Concentration Bounds
 """
 def binomial_iid(N,alpha,muhat):
     def invert_upper_tail(mu): return binom.cdf(N*muhat, N, mu) - (alpha/2)
@@ -26,20 +26,6 @@ def clt_iid(x, alpha):
     sigmahat = x.std()
     w = norm.ppf(1-alpha/2) * sigmahat / np.sqrt(n)
     return np.array([ x.mean() - w, x.mean() + w ])
-
-def wsr_iid_ana(x,alpha,grid,num_cpus=10,step=1): # x is a [0,1] bounded sequence
-    n = x.shape[0]
-    muhats = (1/2 + np.cumsum(x))/(np.arange(n)+1)
-    sigmahat2s = (1/4 + np.cumsum((x-muhats)**2))/(np.arange(n)+1)
-    lambdas = np.concatenate([np.array([1,]), np.sqrt(2*np.log(2/alpha)/(n*sigmahat2s))[:-1]]) # can't use last entry
-    def M(m,i): return 1/2*np.maximum(
-        np.prod(1+np.minimum(lambdas[:i], 0.5/m)*(x[:i]-m)),
-        np.prod(1-np.minimum(lambdas[:i], 0.5/(1-m))*(x[:i]-m))
-    )
-    M = np.vectorize(M)
-    M_list = Parallel(n_jobs=num_cpus)(delayed(M)(grid,i) for i in range(1,n+step,step))
-    ci_full = grid[np.where(np.prod(np.stack(M_list, axis=1) < 1/alpha , axis=1))[0]]
-    return np.array([ci_full.min(), ci_full.max()]) # only output the interval
 
 def wsr_iid(x_n, alpha, grid, num_cpus=10, parallelize: bool = False, intersection: bool = True,
             theta: float = 0.5, c: float = 0.75):
@@ -85,13 +71,28 @@ def wsr_iid(x_n, alpha, grid, num_cpus=10, parallelize: bool = False, intersecti
     return np.array([ci_full.min(), ci_full.max()]) # only output the interval
 
 """
+    Mean estimation confidence intervals
+"""
+
+def pp_mean_iid_asymptotic(Y_labeled, Yhat_labeled, Yhat_unlabeled, alpha):
+    n = Y_labeled.shape[0]
+    N = Yhat_unlabeled.shape[0]
+    tildethetaf = Yhat_unlabeled.mean()
+    rechat = (Yhat_labeled - Y_labeled).mean()
+    thetahatPP = tildethetaf - rechat
+    sigmaftilde = np.std(Yhat_unlabeled)
+    sigmarec = np.std(Yhat_labeled -  Y_labeled)
+    hw = norm.ppf(1-alpha/2)*np.sqrt((sigmaftilde**2/N) + (sigmarec**2/n))
+    return [thetahatPP - hw, thetahatPP + hw]
+
+"""
     OLS algorithm with sandwich variance estimator
 """
 def ols(features, outcome):
     ols_coeffs = np.linalg.pinv(features).dot(outcome)
     return ols_coeffs
 
-def standard_ols_interval(X, Y, alpha, return_halfwidth=False, sandwich=True):
+def classical_ols_interval(X, Y, alpha, return_halfwidth=False, sandwich=True):
     n = X.shape[0]
     thetahat = ols(X, Y)
     Sigmainv = np.linalg.inv(1/n * X.T@X)
@@ -109,12 +110,12 @@ def standard_ols_interval(X, Y, alpha, return_halfwidth=False, sandwich=True):
 
 def pp_ols_interval(X_labeled, X_unlabeled, Y_labeled, Yhat_labeled, Yhat_unlabeled, alpha, sandwich=True):
     n = X_labeled.shape[0]
-    N = n + X_unlabeled.shape[0]
+    N = X_unlabeled.shape[0]
     thetatildef = ols(X_unlabeled, Yhat_unlabeled)
     rectifierhat = ols(X_labeled, Y_labeled - Yhat_labeled)
     pp_thetahat = thetatildef + rectifierhat
-    hw_tildef = standard_ols_interval(X_unlabeled, Yhat_unlabeled, 0.001*alpha, return_halfwidth=True, sandwich=sandwich)
-    hw_rectifier = standard_ols_interval(X_labeled, Y_labeled-Yhat_labeled, 0.999*alpha, return_halfwidth=True, sandwich=sandwich)
+    hw_tildef = classical_ols_interval(X_unlabeled, Yhat_unlabeled, 0.001*alpha, return_halfwidth=True, sandwich=sandwich)
+    hw_rectifier = classical_ols_interval(X_labeled, Y_labeled-Yhat_labeled, 0.999*alpha, return_halfwidth=True, sandwich=sandwich)
     halfwidth = hw_tildef + hw_rectifier
     return pp_thetahat - halfwidth, pp_thetahat + halfwidth
 
@@ -135,7 +136,7 @@ def product(*args, **kwds):
     for prod in result:
         yield tuple(prod)
 
-def standard_logistic_interval(X, Y, alpha, num_grid=1000):
+def classical_logistic_interval(X, Y, alpha, num_grid=1000):
     n = X.shape[0]
     d = X.shape[1]
     delta = alpha*0.9
@@ -168,7 +169,7 @@ def pp_logistic_interval(X_labeled, X_unlabeled, Y_labeled, Yhat_labeled, Yhat_u
     X = np.concatenate([X_labeled, X_unlabeled], axis=0)
     n = X_labeled.shape[0]
     d = X_labeled.shape[1]
-    N = n + X_unlabeled.shape[0]
+    N = X_unlabeled.shape[0]
     Yhat_labeled = np.clip(Yhat_labeled, 0, 1) # TODO: Check for an improvement after clipping
     Yhat_unlabeled = np.clip(Yhat_unlabeled, 0, 1)
 
