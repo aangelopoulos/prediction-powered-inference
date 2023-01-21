@@ -79,7 +79,7 @@ def make_plots(df, true):
     # Line plots
     ns = np.sort(np.unique(df["n"]))
 
-    fig, axs = plt.subplots(nrows=3, ncols=2, figsize=(10, 5))
+    fig, axs = plt.subplots(nrows=3, ncols=2, figsize=(12, 5))
     my_palette = sns.color_palette(["#71D26F","#BFB9B9","#D0A869"], 3)
     sns.set_theme(style="white", palette=my_palette, font_scale=1)
 
@@ -144,7 +144,7 @@ def make_intervals(df, true, axs):
     axs[1].set_xlabel("sex coeff")
     axs[1].set_yticks([])
     axs[1].set_yticklabels([])
-    axs[1].legend(bbox_to_anchor = (1,1), borderpad=1, fontsize=15)
+    axs[1].legend(bbox_to_anchor = (1.1,1), borderpad=1, fontsize=15)
     axs[1].xaxis.set_tick_params()
     axs[1].locator_params(axis='x', nbins=4)
     axs[1].set_ylim([0,1])
@@ -174,4 +174,4 @@ def make_histograms(df, axs):
     cvg_predictionpowered_age = (df[(df["estimator"]=="prediction-powered") & (df["coefficient"]=="age")]["covered"]).astype(int).mean()
     cvg_predictionpowered_sex = (df[(df["estimator"]=="prediction-powered") & (df["coefficient"]=="sex")]["covered"]).astype(int).mean()
 
-    print(f"Classical coverage ({cvg_classical_age},{cvg_classical_sex}), prediction-powered ({cvg_predictionpowered_age},{cvg_predictionpowered_sex})")
+    # print(f"Classical coverage ({cvg_classical_age},{cvg_classical_sex}), prediction-powered ({cvg_predictionpowered_age},{cvg_predictionpowered_sex})")
