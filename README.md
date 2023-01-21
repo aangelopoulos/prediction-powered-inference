@@ -1,1 +1,1 @@
-# model-assisted-inference
+# Prediction-Powered Inference
