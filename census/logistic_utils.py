@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import matplotlib.patheffects as pe
 import seaborn as sns
 import pandas as pd
+from ols_utils import transform_features
 
 from scipy.stats import norm
 from scipy.optimize import brentq
@@ -18,43 +19,53 @@ from sklearn.preprocessing import StandardScaler
 import xgboost as xgb
 from tqdm import tqdm
 
-def acs_filter(df):
-    df.fillna(-1)
-    df = df[(df['PINCP'] >= 0 ) & (df['PRIVCOV'] >= 0)]
-    df.loc[:,'PRIVCOV'] = 1-(df.loc[:,'PRIVCOV']-1)
+def acs_filter(df, outcome_name, reg_feat_name):
+    df = df[np.bitwise_not(np.isnan(df[outcome_name]))]
+    df = df[np.bitwise_not(np.isnan(df[reg_feat_name]))]
+    df[outcome_name] = 1 - (df[outcome_name] - 1)
+    assert (np.unique(df[outcome_name]) == np.array([0,1])).all()
     return df
 
-def get_data(year,features,outcome,acs_filter=None,randperm=True):
+def get_data(year,feature_names,outcome_name,regression_feature_name,acs_filter=None,randperm=True):
     # Predict income and regress to time to work
     data_source = folktables.ACSDataSource(survey_year=year, horizon='1-Year', survey='person')
     acs_data = data_source.get_data(states=["CA"], download=True)
-    if not (acs_filter is None):
-        acs_data = acs_filter(acs_data)
-    df_features = acs_data[features]
-    df_outcome = acs_data[outcome]
+    if acs_filter is not None:
+        acs_data = acs_filter(acs_data, outcome_name, regression_feature_name)
+    df_features = acs_data[feature_names]
+    df_outcome = acs_data[outcome_name]
     if randperm:
         shuffler = np.random.permutation(df_outcome.shape[0])
         df_features, df_outcome = df_features.iloc[shuffler], df_outcome.iloc[shuffler]
     return df_features, df_outcome
 
-def get_tree(year=2017):
+def get_tree(year,feature_names,ft,outcome_name,reg_feat_name,enc=None,transform=False, acs_filter=None):
     try:
         tree = xgb.Booster()
         tree.load_model(f"./.cache/logistic-model{year}.json")
     except:
-        features_2017, privcov_2017 = get_data(year=2017, features=['AGEP','SCHL','MAR','RELP','DIS','PINCP','ESP','CIT','MIG','MIL','ANC','NATIVITY','DEAR','DEYE','DREM','SEX','RAC1P'], outcome='PRIVCOV', filter=filter)
-        tree = train_eval_regressor(features_2017, privcov_2017)
+        features, outcome = get_data(year, feature_names, outcome_name, reg_feat_name, acs_filter=acs_filter)
+        if transform:
+            print("Transforming features and training tree.")
+            tree = train_eval_regressor(transform_features(features, ft, enc)[0], outcome, transform=transform)
+        else:
+            print("Training tree without transformation.")
+            tree = train_eval_regressor(features, outcome)
         os.makedirs("./.cache/", exist_ok=True)
         tree.save_model(f"./.cache/logistic-model{year}.json")
     return tree
 
-def train_eval_regressor(features, outcome, add_bias=True):
+def train_eval_regressor(features, outcome, transform=False):
     X_train, X_test, y_train, y_test = train_test_split(features, outcome, test_size=0.1)
-    dtrain = xgb.DMatrix(X_train.to_numpy(), label=y_train.to_numpy())
-    dtest = xgb.DMatrix(X_test.to_numpy(), label=y_test.to_numpy())
-    param = {'max_depth': 7, 'eta': 0.1, 'objective': 'reg:pseudohubererror', 'eval_metric': ['rmse','mae']}
+    if transform:
+        dtrain = xgb.DMatrix(X_train, label=y_train)
+        dtest = xgb.DMatrix(X_test, label=y_test)
+    else:
+        dtrain = xgb.DMatrix(X_train.to_numpy(), label=y_train.to_numpy())
+        dtest = xgb.DMatrix(X_test.to_numpy(), label=y_test.to_numpy())
+    param = {'max_depth': 7, 'eta': 0.1, 'objective': 'binary:logistic', 'eval_metric': ['error', 'mae']}
     evallist = [(dtest, 'eval'), (dtrain, 'train')]
-    num_round = 1000
+    num_round = 500
     tree = xgb.train(param, dtrain, num_round, evallist)
     return tree
 
@@ -106,7 +117,8 @@ def make_lineplots(df, ax):
 
 def make_intervals(df, true, ax):
     ci_imputed = df[df["estimator"] == "imputed"]
-    ci_imputed = [ci_imputed["lb"].mean(), ci_imputed["ub"].mean()]
+    epsilon = 1e-7 # Add a bit to the imputed estimate, because otherwise it is not visible on the plot.
+    ci_imputed = [ci_imputed["lb"].mean() - epsilon,  ci_imputed["ub"].mean() + epsilon]
     ci_classical = df[df["estimator"] == "classical"]
     ci_classical = [ci_classical["lb"].mean(), ci_classical["ub"].mean()]
     ci = df[df["estimator"] == "prediction-powered"]

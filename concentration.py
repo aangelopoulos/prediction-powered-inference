@@ -92,7 +92,7 @@ def ols(features, outcome):
     ols_coeffs = np.linalg.pinv(features).dot(outcome)
     return ols_coeffs
 
-def classical_ols_interval(X, Y, alpha, return_halfwidth=False, sandwich=True):
+def classical_ols_interval(X, Y, alpha, return_stderr=False, sandwich=True):
     n = X.shape[0]
     thetahat = ols(X, Y)
     Sigmainv = np.linalg.inv(1/n * X.T@X)
@@ -102,11 +102,10 @@ def classical_ols_interval(X, Y, alpha, return_halfwidth=False, sandwich=True):
         M = 1/n * ((Y - X@thetahat)**2).mean() * X.T@X
     V = Sigmainv@M@Sigmainv
     stderr = np.sqrt(np.diag(V))
+    if return_stderr:
+        return stderr
     halfwidth = norm.ppf(1-alpha/2) * stderr/np.sqrt(n)
-    if return_halfwidth:
-        return halfwidth
-    else:
-        return thetahat - halfwidth, thetahat + halfwidth
+    return thetahat - halfwidth, thetahat + halfwidth
 
 def pp_ols_interval(X_labeled, X_unlabeled, Y_labeled, Yhat_labeled, Yhat_unlabeled, alpha, sandwich=True):
     n = X_labeled.shape[0]
@@ -114,16 +113,16 @@ def pp_ols_interval(X_labeled, X_unlabeled, Y_labeled, Yhat_labeled, Yhat_unlabe
     thetatildef = ols(X_unlabeled, Yhat_unlabeled)
     rectifierhat = ols(X_labeled, Y_labeled - Yhat_labeled)
     pp_thetahat = thetatildef + rectifierhat
-    hw_tildef = classical_ols_interval(X_unlabeled, Yhat_unlabeled, 0.001*alpha, return_halfwidth=True, sandwich=sandwich)
-    hw_rectifier = classical_ols_interval(X_labeled, Y_labeled-Yhat_labeled, 0.999*alpha, return_halfwidth=True, sandwich=sandwich)
-    halfwidth = hw_tildef + hw_rectifier
+    stderr_tildef = classical_ols_interval(X_unlabeled, Yhat_unlabeled, 0.001*alpha, return_stderr=True, sandwich=sandwich)
+    stderr_rec = classical_ols_interval(X_labeled, Y_labeled-Yhat_labeled, 0.999*alpha, return_stderr=True, sandwich=sandwich)
+    halfwidth = norm.ppf(1-alpha/2)*np.sqrt(((stderr_rec**2)/n) + ((stderr_tildef**2)/N))
     return pp_thetahat - halfwidth, pp_thetahat + halfwidth
 
 """
     Logistic regression algorithm
 """
 def logistic(X, y):
-    clf = LogisticRegression(penalty='none').fit(X,y)
+    clf = LogisticRegression(penalty='none', solver='lbfgs', max_iter=10000, tol=1e-15, fit_intercept=False).fit(X,y)
     return clf.coef_.squeeze()
 
 def product(*args, **kwds):
@@ -136,67 +135,64 @@ def product(*args, **kwds):
     for prod in result:
         yield tuple(prod)
 
-def classical_logistic_interval(X, Y, alpha, num_grid=1000):
+def classical_logistic_interval(X, Y, alpha, num_grid=500):
     n = X.shape[0]
     d = X.shape[1]
-    delta = alpha*0.9
-    point_estimate = logistic(X, (Y.astype(int) > 0.5).astype(int)) # Used for setting the grid.
+    Y = (Y >= 0.5).astype(int)
+    point_estimate = logistic(X, Y) # Used for setting the grid.
 
-    mean = 1/n * X.T @ Y
-    sigmahat_cov = np.std(X * Y[:,None], axis=0)
-    XTyn_halfwidth = norm.ppf(1-delta/(2*d)) * sigmahat_cov/np.sqrt(n)
-
-    theta_grid = np.linspace(-3*point_estimate, point_estimate*3, num_grid)
+    theta_grid = np.concatenate([
+        np.linspace(-3*point_estimate, point_estimate, num_grid//2),
+        np.linspace(point_estimate, 3*point_estimate, num_grid//2)[1:]
+    ])
 
     mu = expit(X@theta_grid.T)
     g = 1/n * X.T@(mu - Y[:, None])
 
     sigmahat_err = np.std(X[:,:,None]*(mu - Y[:,None])[:,None,:], axis=0)
-    err_halfwidth = norm.ppf(1-(alpha-delta)/(2*d)) * sigmahat_err/np.sqrt(n)
+    grad_halfwidth = norm.ppf(1-alpha/(2*d)) * sigmahat_err/np.sqrt(n)
 
-    total_halfwidth = XTyn_halfwidth[:,None] + err_halfwidth
-
-    condition = np.all(np.abs(g) <= total_halfwidth, axis=0)
+    condition = np.all(np.abs(g) <= grad_halfwidth, axis=0)
 
     Cpp = theta_grid[condition]
 
     # TODO: If all positive, make grid wider
-    assert condition[0] == False & condition[-1] == False
+    assert (condition[0] == False) & (condition[-1] == False)
 
     return [ Cpp.min(axis=0), Cpp.max(axis=0) ]
 
-def pp_logistic_interval(X_labeled, X_unlabeled, Y_labeled, Yhat_labeled, Yhat_unlabeled, alpha, num_grid=1000):
+def pp_logistic_interval(X_labeled, X_unlabeled, Y_labeled, Yhat_labeled, Yhat_unlabeled, alpha, num_grid=500):
     X = np.concatenate([X_labeled, X_unlabeled], axis=0)
     n = X_labeled.shape[0]
     d = X_labeled.shape[1]
     N = X_unlabeled.shape[0]
-    Yhat_labeled = np.clip(Yhat_labeled, 0, 1) # TODO: Check for an improvement after clipping
+    Yhat_labeled = np.clip(Yhat_labeled, 0, 1)
     Yhat_unlabeled = np.clip(Yhat_unlabeled, 0, 1)
 
     Yhat = np.concatenate([Yhat_labeled, Yhat_unlabeled], axis=0)
-    delta = alpha*0.9
     point_estimate = logistic(X_labeled, (Y_labeled > 0.5).astype(int))
 
     rechat = 1/n * X_labeled.T @ (Yhat_labeled - Y_labeled)
     sigmahat_rec = np.std(X_labeled * (Yhat_labeled - Y_labeled)[:,None], axis=0)
-    rec_halfwidth = norm.ppf(1-delta/(2*d)) * sigmahat_rec/np.sqrt(n)
 
-    theta_grid = np.linspace(-5*point_estimate, point_estimate*5, num_grid)
+    theta_grid = np.concatenate([
+        np.linspace(-3*point_estimate, point_estimate, num_grid//2),
+        np.linspace(point_estimate, 3*point_estimate, num_grid//2)[1:]
+    ])
 
     mu = expit(X@theta_grid.T)
     g = 1/N * X.T@(mu - Yhat[:, None])
 
     sigmahat_err = np.std(X[:,:,None]*(mu - Yhat[:,None])[:,None,:], axis=0)
-    err_halfwidth = norm.ppf(1-(alpha-delta)/(2*d)) * sigmahat_err/np.sqrt(N)
 
-    total_halfwidth = rec_halfwidth[:,None] + err_halfwidth
+    halfwidth = norm.ppf(1-alpha/(2*d)) * np.sqrt( sigmahat_rec[:,None]**2/n + sigmahat_err**2/N)
 
-    condition = np.all( np.abs(g + rechat[:,None]) <= total_halfwidth, axis=0)
+    condition = np.all( np.abs(g + rechat[:,None]) <= halfwidth, axis=0)
 
     Cpp = theta_grid[condition]
 
     # TODO: If all positive, make grid wider
-    assert condition[0] == False & condition[-1] == False
+    assert (condition[0] == False) & (condition[-1] == False)
 
     return [ Cpp.min(axis=0), Cpp.max(axis=0) ]
 

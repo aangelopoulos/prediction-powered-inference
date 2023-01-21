@@ -19,8 +19,6 @@ import xgboost as xgb
 from hyperopt import STATUS_OK, Trials, fmin, hp, tpe
 from tqdm import tqdm
 
-from concentration import ols, standard_ols_interval, pp_ols_interval
-
 import pdb
 
 def get_data(year,features,outcome, randperm=True):
@@ -65,7 +63,7 @@ def train_eval_regressor(features, outcome, add_bias=True):
 
     tree = xgb.train({'eta': 0.3, 'max_depth': 7, 'objective': 'reg:pseudohubererror'}, dtrain, 10000, evallist)
     return tree
-    
+
 def get_tree(year, features, ft, enc=None):
     try:
         income_tree = xgb.Booster()
