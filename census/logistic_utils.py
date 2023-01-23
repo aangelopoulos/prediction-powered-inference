@@ -107,7 +107,7 @@ def make_plots(df, true):
 def make_lineplots(df, ax):
     plot_df = df[["estimator","width", "n"]].groupby(["estimator","n"], group_keys=False).mean()["width"].reset_index()
     lplt = sns.lineplot(data=plot_df[plot_df["estimator"] != "imputed"], x="n", y="width", hue="estimator", ax=ax, hue_order=["prediction-powered", "classical"])
-    ax.set_ylabel("mean width")
+    ax.set_ylabel("width")
     ax.set_xlabel("n")
     ax.xaxis.set_tick_params()
     ax.yaxis.set_tick_params()
