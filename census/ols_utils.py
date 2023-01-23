@@ -35,7 +35,7 @@ def get_data(year,features,outcome, randperm=True):
 
 def plot_data(age,income,sex):
     plt.figure(figsize=(7.5,2.5))
-    sns.set_theme(style="white", palette="pastel", font_scale=1.5)
+    sns.set_theme(style="white", palette="pastel", font_scale=1.5, font="DejaVu Sans")
     ageranges = np.digitize(age, bins=[0,20,30,40,50])
     sex = np.array(['female' if s==2 else 'male' for s in sex])
     sns.boxplot(x=ageranges, y=income, hue=sex, showfliers=False)
@@ -81,7 +81,7 @@ def make_plots(df, true):
 
     fig, axs = plt.subplots(nrows=3, ncols=2, figsize=(12, 5))
     my_palette = sns.color_palette(["#71D26F","#BFB9B9","#D0A869"], 3)
-    sns.set_theme(style="white", palette=my_palette, font_scale=1)
+    sns.set_theme(style="white", palette=my_palette, font_scale=1, font="DejaVu Sans")
 
     make_intervals(df[df["n"] == ns.min()], true, axs[0,:])
 

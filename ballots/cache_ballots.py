@@ -1,5 +1,6 @@
 import os, time
 import numpy as np
+import matplotlib.pyplot as plt
 import pandas as pd
 import cv2 as cv
 from PIL import Image
