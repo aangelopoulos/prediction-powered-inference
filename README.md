@@ -14,7 +14,7 @@ This repository contains code for prediction-powered inference — a framework f
 Each subfolder applies prediction-powered inference to a different inference task in proteomics, genomics, electronic voting, remote sensing, census analysis, or ecology.
 </p>
 
-<p align="center"> <b>The notebooks are easy to run!</b></p>
+<p align="center"> <b>Start by running the notebooks!</b></p>
 <p>
 You can test and develop prediction-powered inference strategies entirely in this sandbox, locally on your laptop. Open a notebook to see the expected output. You can use these notebooks to experiment with existing methods or as templates to develop your own. 
 </p>
