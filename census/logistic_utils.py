@@ -71,7 +71,7 @@ def train_eval_regressor(features, outcome, transform=False):
 
 def plot_data(pincp, privcov):
     plt.figure(figsize=(7.5,2.5))
-    sns.set_theme(style="white", palette="pastel", font_scale=1.15)
+    sns.set_theme(style="white", palette="pastel", font_scale=1.15, font='DejaVu Sans')
     bins = [20000,40000,60000,80000,100000]
     incomeranges = np.digitize(pincp, bins=bins)
     avgs = [privcov[incomeranges == i].mean() for i in range(len(bins)+1)]
@@ -90,7 +90,7 @@ def make_plots(df, true):
     ns = np.sort(np.unique(df["n"]))
 
     my_palette = sns.color_palette(["#71D26F","#BFB9B9","#D0A869"], 3)
-    sns.set_theme(style="white", palette=my_palette, font_scale=1.2)
+    sns.set_theme(style="white", palette=my_palette, font_scale=1.2, font='DejaVu Sans')
     fig, axs = plt.subplots(ncols=3, figsize=(11, 2.5))
 
     make_histograms(df[df["n"] == ns.min()], axs[0])
@@ -128,7 +128,8 @@ def make_intervals(df, true, ax):
     ax.plot([ci_classical[0], ci_classical[1]],[0.25, 0.25], linewidth=20, color="#EEEDED", path_effects=[pe.Stroke(linewidth=22, offset=(-1,0), foreground="#BFB9B9"), pe.Stroke(linewidth=22, offset=(1,0), foreground="#BFB9B9"), pe.Normal()], label='classical', solid_capstyle='butt')
     ax.plot([ci_imputed[0], ci_imputed[1]],[0.1, 0.1], linewidth=20, color="#FFEACC", path_effects=[pe.Stroke(linewidth=22, offset=(-1,0), foreground="#FFCD82"), pe.Stroke(linewidth=22, offset=(1,0), foreground="#FFCD82"), pe.Normal()], label='imputed', solid_capstyle='butt')
     ax.vlines(true[0], ymin=0.0, ymax=1, linestyle="dotted", linewidth=3, label="ground truth", color="#F7AE7C")
-    ax.set_xlabel("coefficient")
+    ax.set_ylabel("")
+    ax.set_xlabel("coeff")
     ax.set_yticks([])
     ax.set_yticklabels([])
     ax.xaxis.set_tick_params()
