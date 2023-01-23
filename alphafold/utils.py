@@ -65,36 +65,6 @@ def B_wor(N, x_n, m, alpha, c: float = 3 / 4, theta: float = 1 / 2, convex_comb:
 
     return Kwor_n
 
-def get_odds_ratio_ci_from_mu_ci(mu1_ci, mu0_ci):
-    # CI on mu_1 / (1 - mu_1)
-    with np.errstate(divide="ignore"):
-        ratio_mu1 = (mu1_ci[0] / (1 - mu1_ci[0]), mu1_ci[1] / (1 - mu1_ci[1]))
-    assert(ratio_mu1[0] <= ratio_mu1[1])
-
-    # CI on mu_0 / (1 - mu_0)
-    with np.errstate(divide="ignore"):
-        ratio_mu0 = (mu0_ci[0] / (1 - mu0_ci[0]), mu0_ci[1] / (1 - mu0_ci[1]))
-    assert(ratio_mu0[0] <= ratio_mu0[1])
-
-    # combine into CI on odds ratio
-    o_ci = (ratio_mu1[0] / ratio_mu0[1], ratio_mu1[1] / ratio_mu0[0])
-    return o_ci
-
-def get_logical_ci(x_n, N):
-    """
-    Confidence interval that would be known for sampling w/o replacement,
-    regardless of concentration strategy used.
-
-    For example, if the sum of our labeled data is 5 and N is 10, then the true mean
-    cannot be any less than 0.5 (assuming all observations are between 0 and 1).
-    """
-    t = np.arange(1, x_n.size + 1)
-    S_n = np.cumsum(x_n)
-    l_n = S_n / N
-    u_n = 1 - (t - S_n) / N
-    return l_n[-1], u_n[-1]
-
-
 def get_betting_wor_ci(x_n, N, alpha, grid_spacing, use_intersection: bool = True,
                        parallelize: bool = False, n_cores: int = None):
     candidates = np.arange(0, 1 + grid_spacing, step=grid_spacing)
@@ -130,6 +100,34 @@ def get_betting_wor_ci(x_n, N, alpha, grid_spacing, use_intersection: bool = Tru
     l_logical, u_logical = get_logical_ci(x_n, N)
     return np.array([np.maximum(l, l_logical), np.minimum(u, u_logical)])
 
+def get_odds_ratio_ci_from_mu_ci(mu1_ci, mu0_ci):
+    # CI on mu_1 / (1 - mu_1)
+    with np.errstate(divide="ignore"):
+        ratio_mu1 = (mu1_ci[0] / (1 - mu1_ci[0]), mu1_ci[1] / (1 - mu1_ci[1]))
+    assert(ratio_mu1[0] <= ratio_mu1[1])
+
+    # CI on mu_0 / (1 - mu_0)
+    with np.errstate(divide="ignore"):
+        ratio_mu0 = (mu0_ci[0] / (1 - mu0_ci[0]), mu0_ci[1] / (1 - mu0_ci[1]))
+    assert(ratio_mu0[0] <= ratio_mu0[1])
+
+    # combine into CI on odds ratio
+    o_ci = (ratio_mu1[0] / ratio_mu0[1], ratio_mu1[1] / ratio_mu0[0])
+    return o_ci
+
+def get_logical_ci(x_n, N):
+    """
+    Confidence interval that would be known for sampling w/o replacement,
+    regardless of concentration strategy used.
+
+    For example, if the sum of our labeled data is 5 and N is 10, then the true mean
+    cannot be any less than 0.5 (assuming all observations are between 0 and 1).
+    """
+    t = np.arange(1, x_n.size + 1)
+    S_n = np.cumsum(x_n)
+    l_n = S_n / N
+    u_n = 1 - (t - S_n) / N
+    return l_n[-1], u_n[-1]
 
 def get_odds_ratio_intervals(df, ptm_name, n, alpha, delta_frac: float = 0.1, use_clt: bool = True,
                              grid_spacing: float = 1e-3, use_iid_approximation: bool = True,
@@ -200,8 +198,8 @@ def get_odds_ratio_intervals(df, ptm_name, n, alpha, delta_frac: float = 0.1, us
             w_z0 = stats.norm.ppf(1 - alpha / 4) * np.sqrt(sigma2f_z0 / f_unlab_z0_N.size + sigma2rect_z0 / rect_lab_z0_n.size)
             mu1_pp = f_unlab_z1_N.mean() - rect_lab_z1_n.mean()
             mu0_pp = f_unlab_z0_N.mean() - rect_lab_z0_n.mean()
-            mu1_mai_ci = (np.maximum(mu1_pp - w_z1, 0), np.minimum(mu1_pp + w_z1, 1))
-            mu0_mai_ci = (np.maximum(mu0_pp - w_z0, 0), np.minimum(mu0_pp + w_z0, 1))
+            mu1_pp_ci = (np.maximum(mu1_pp - w_z1, 0), np.minimum(mu1_pp + w_z1, 1))
+            mu0_pp_ci = (np.maximum(mu0_pp - w_z0, 0), np.minimum(mu0_pp + w_z0, 1))
 
         else:  # use finite-sample WSR concentration
             grid = np.arange(grid_spacing, 1, step=grid_spacing)
@@ -218,8 +216,8 @@ def get_odds_ratio_intervals(df, ptm_name, n, alpha, delta_frac: float = 0.1, us
             f_z1_ci = wsr_iid(unlab_z1_df['pred_disordered'].to_numpy(), delta / 2, grid, parallelize=False)
             f_z0_ci = wsr_iid(unlab_z0_df['pred_disordered'].to_numpy(), delta / 2, grid, parallelize=False)
 
-            mu1_mai_ci = (np.maximum(f_z1_ci[0] - rect_z1_ci[1], 0), np.minimum(f_z1_ci[1] - rect_z1_ci[0], 1))
-            mu0_mai_ci = (np.maximum(f_z0_ci[0] - rect_z0_ci[1], 0), np.minimum(f_z0_ci[1] - rect_z0_ci[0], 1))
+            mu1_pp_ci = (np.maximum(f_z1_ci[0] - rect_z1_ci[1], 0), np.minimum(f_z1_ci[1] - rect_z1_ci[0], 1))
+            mu0_pp_ci = (np.maximum(f_z0_ci[0] - rect_z0_ci[1], 0), np.minimum(f_z0_ci[1] - rect_z0_ci[0], 1))
 
     else: # finite population version
         rect_z1_ci = get_betting_wor_ci(
@@ -236,10 +234,10 @@ def get_odds_ratio_intervals(df, ptm_name, n, alpha, delta_frac: float = 0.1, us
         f_z1 = z1_df['pred_disordered'].mean()
         f_z0 = z0_df['pred_disordered'].mean()
 
-        mu1_mai_ci = (np.maximum(f_z1 - rect_z1_ci[1], 0), np.minimum(f_z1 - rect_z1_ci[0], 1))
-        mu0_mai_ci = (np.maximum(f_z0 - rect_z0_ci[1], 0), np.minimum(f_z0 - rect_z0_ci[0], 1))
+        mu1_pp_ci = (np.maximum(f_z1 - rect_z1_ci[1], 0), np.minimum(f_z1 - rect_z1_ci[0], 1))
+        mu0_pp_ci = (np.maximum(f_z0 - rect_z0_ci[1], 0), np.minimum(f_z0 - rect_z0_ci[0], 1))
 
-    # ----- classical CI (using only labeled data) -----
+    # ----- clssical CI (using only labeled data) -----
 
     y_z1_n = lab_z1_df['disordered'].to_numpy()
     y_z0_n = lab_z0_df['disordered'].to_numpy()
@@ -249,23 +247,23 @@ def get_odds_ratio_intervals(df, ptm_name, n, alpha, delta_frac: float = 0.1, us
             sigma2y_z0 = np.mean(np.square(y_z0_n - y_z0_n.mean()))
             w_z1 = stats.norm.ppf(1 - alpha / 4) *  np.sqrt(sigma2y_z1 / y_z1_n.size)
             w_z0 = stats.norm.ppf(1 - alpha / 4) *  np.sqrt(sigma2y_z0 / y_z0_n.size)
-            mu1_cla_ci = (np.maximum(y_z1_n.mean() - w_z1, 0), np.minimum(y_z1_n.mean() + w_z1, 1))
-            mu0_cla_ci = (np.maximum(y_z0_n.mean() - w_z0, 0), np.minimum(y_z0_n.mean() + w_z0, 1))
+            mu1_cl_ci = (np.maximum(y_z1_n.mean() - w_z1, 0), np.minimum(y_z1_n.mean() + w_z1, 1))
+            mu0_cl_ci = (np.maximum(y_z0_n.mean() - w_z0, 0), np.minimum(y_z0_n.mean() + w_z0, 1))
         else: # use finite-sample WSR concentration
-            mu1_cla_ci = wsr_iid(y_z1_n, alpha / 2, grid, parallelize=False)
-            mu0_cla_ci = wsr_iid(y_z0_n, alpha / 2, grid, parallelize=False)
+            mu1_cl_ci = wsr_iid(y_z1_n, alpha / 2, grid, parallelize=False)
+            mu0_cl_ci = wsr_iid(y_z0_n, alpha / 2, grid, parallelize=False)
     else:
-        mu1_cla_ci = get_betting_wor_ci(
+        mu1_cl_ci = get_betting_wor_ci(
             y_z1_n, N_z1, alpha / 2, grid_spacing, use_intersection=use_intersection, parallelize=False
         )
-        mu0_cla_ci = get_betting_wor_ci(
+        mu0_cl_ci = get_betting_wor_ci(
             y_z0_n, N_z0, alpha / 2, grid_spacing, use_intersection=use_intersection, parallelize=False
         )
 
     # ===== CIs on odds ratio =====
 
-    o_mai_ci = get_odds_ratio_ci_from_mu_ci(mu1_mai_ci, mu0_mai_ci)
-    o_cla_ci = get_odds_ratio_ci_from_mu_ci(mu1_cla_ci, mu0_cla_ci)
+    o_pp_ci = get_odds_ratio_ci_from_mu_ci(mu1_pp_ci, mu0_pp_ci)
+    o_cl_ci = get_odds_ratio_ci_from_mu_ci(mu1_cl_ci, mu0_cl_ci)
 
     # ----- true (finite population) quantities -----
     mu1 = z1_df['disordered'].mean()
@@ -279,19 +277,19 @@ def get_odds_ratio_intervals(df, ptm_name, n, alpha, delta_frac: float = 0.1, us
 
     if verbose:
         print('True mu1: {:.3f}.'.format(mu1))
-        print('  Prediction-powered: [{:.2f}, {:.2f}] (length {:.2f})\n  Classical: [{:.2f}, {:.2f}] (length {:.2f}). '.format(
-            mu1_mai_ci[0], mu1_mai_ci[1], mu1_mai_ci[1] - mu1_mai_ci[0],
-            mu1_cla_ci[0], mu1_cla_ci[1], mu1_cla_ci[1] - mu1_cla_ci[0]))
+        print('  Prediction-powered: [{:.2f}, {:.2f}] (length {:.2f})\n  clssical: [{:.2f}, {:.2f}] (length {:.2f}). '.format(
+            mu1_pp_ci[0], mu1_pp_ci[1], mu1_pp_ci[1] - mu1_pp_ci[0],
+            mu1_cl_ci[0], mu1_cl_ci[1], mu1_cl_ci[1] - mu1_cl_ci[0]))
         print('True mu0: {:.3f}.'.format(mu0))
-        print('  Prediction-powered: [{:.2f}, {:.2f}] (length {:.2f}).\n  Classical: [{:.2f}, {:.2f}] (length {:.2f}). '.format(
-            mu0_mai_ci[0], mu0_mai_ci[1], mu0_mai_ci[1] - mu0_mai_ci[0],
-            mu0_cla_ci[0], mu0_cla_ci[1], mu0_cla_ci[1] - mu0_cla_ci[0]))
+        print('  Prediction-powered: [{:.2f}, {:.2f}] (length {:.2f}).\n  clssical: [{:.2f}, {:.2f}] (length {:.2f}). '.format(
+            mu0_pp_ci[0], mu0_pp_ci[1], mu0_pp_ci[1] - mu0_pp_ci[0],
+            mu0_cl_ci[0], mu0_cl_ci[1], mu0_cl_ci[1] - mu0_cl_ci[0]))
         print('True odds ratio: {:.3f}.'.format(o))
-        print('  Prediction-powered: [{:.2f}, {:.2f}] (length {:.2f}).\n  Classical: [{:.2f}, {:.2f}] (length {:.2f}). '.format(
-            o_mai_ci[0], o_mai_ci[1], o_mai_ci[1] - o_mai_ci[0],
-            o_cla_ci[0], o_cla_ci[1], o_cla_ci[1] - o_cla_ci[0]))
+        print('  Prediction-powered: [{:.2f}, {:.2f}] (length {:.2f}).\n  clssical: [{:.2f}, {:.2f}] (length {:.2f}). '.format(
+            o_pp_ci[0], o_pp_ci[1], o_pp_ci[1] - o_pp_ci[0],
+            o_cl_ci[0], o_cl_ci[1], o_cl_ci[1] - o_cl_ci[0]))
 
-    return mu1, mu1_mai_ci, mu1_cla_ci, mu0, mu0_mai_ci, mu0_cla_ci, o, o_mai_ci, o_cla_ci,
+    return mu1, mu1_pp_ci, mu1_cl_ci, mu0, mu0_pp_ci, mu0_cl_ci, o, o_pp_ci, o_cl_ci,
 
 
 
