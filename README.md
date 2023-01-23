@@ -9,8 +9,7 @@
 </p>
 
 <p>
-This repository contains code for prediction-powered inference — a framework for constructing confidence intervals when using predictions from a machine learning model.
-    The main algorithms are in <code>ppi.py</code>.  
+This repository contains code for prediction-powered inference — a framework for constructing confidence intervals when using predictions from a machine learning model. The main algorithms are in <code>ppi.py</code>.  
 Each subfolder applies prediction-powered inference to a different inference task in proteomics, genomics, electronic voting, remote sensing, census analysis, or ecology.
 </p>
 
