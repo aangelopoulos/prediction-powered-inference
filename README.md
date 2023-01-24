@@ -3,7 +3,7 @@
 <p align="center" style="margin-bottom:0px; border-bottom:0px; padding-bottom:0px">Anastasios N. Angelopoulos, Stephen Bates, Clara Fannjiang, Michael I. Jordan, Tijana Zrnic</p>
 
 <p align="center">
-    <a style="text-decoration:none !important;" href="https://arxiv.org/abs/" alt="arXiv"><img src="https://img.shields.io/badge/paper-arXiv-red" /></a>
+    <a style="text-decoration:none !important;" href="https://arxiv.org/abs/2301.09633" alt="arXiv"><img src="https://img.shields.io/badge/paper-arXiv-red" /></a>
     <a style="text-decoration:none !important;" href="https://docs.conda.io/en/latest/miniconda.html" alt="package management"> <img src="https://img.shields.io/badge/conda-env-green" /></a>
     <a style="text-decoration:none !important;" href="https://opensource.org/licenses/MIT" alt="License"><img src="https://img.shields.io/badge/license-MIT-blue.svg" /></a>
 </p>
@@ -32,13 +32,13 @@ You can test and develop prediction-powered inference strategies entirely in thi
     To run these notebooks locally, you just need to have the correct dependencies installed and press <code>run all cells</code>! Cloning the GitHub and running the notebooks will automatically download all required data and model outputs. Code for generating the precomputed data from the raw datasets is available in each individual subfolder. There is one for each dataset. To create a <code>conda</code> environment with the correct dependencies, run <code>conda env create -f environment.yml</code>. If you still get a dependency error, make sure to activate the <code>ppi</code> environment within the Jupyter notebook.
 </p>
 
-This repository is meant to accompany our paper, <a href="https://arxiv.org/abs/">Prediction-Powered Inference</a>.
+This repository is meant to accompany our paper, <a href="https://arxiv.org/abs/2301.09633">Prediction-Powered Inference</a>.
 The paper contains detailed explanations and attributions for each example.
 If you find this repository useful, in addition to the relevant methods and datasets, please cite:
 </p>
 <pre><code>@article{angelopoulos2023prediction,
   title={Prediction-Powered Inference},
   author={Angelopoulos, Anastasios N and Bates, Stephen and Fannjiang, Clara and Jordan, Michael I. and Zrnic, Tijana},
-  journal={arXiv preprint arXiv:},
+  journal={arXiv preprint arXiv:2301.09633},
   year={2023}
 }</code></pre>
