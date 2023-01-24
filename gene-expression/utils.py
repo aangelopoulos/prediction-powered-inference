@@ -42,7 +42,7 @@ def get_classical_ci(y_n, q, alpha, y_lb: float = -np.inf, y_ub: float = np.inf)
         ub = y_ub
     return lb, ub
 
-def get_quantile_intervals(y_all, f_all, q, n, alpha, theta_grid_spacing: float = 0.1, n_train: int = 5):
+def get_quantile_intervals(y_all, f_all, q, n, alpha, theta_grid_spacing: float = 0.01, n_train: int = 5):
     y_n, y_N, f_n, f_N = train_test_split(y_all, f_all, train_size=n)
     if n_train:
         # fit median regressor with handful of labeled data points
