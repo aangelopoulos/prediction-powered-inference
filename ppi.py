@@ -221,18 +221,23 @@ def clt_swr(x,N,alpha):
 
 def wsr_swr(x,N,alpha,grid,num_cpus=10, intersection=True): # x is a [0,1] bounded sequence
     n = x.shape[0]
-    def mu(m,i): return (N*m - np.concatenate([np.array([0,]), np.cumsum(x[:i-1])]))/(N - (np.arange(i)+1) + 1 )
-    muhats = (1/2 + np.cumsum(x))/(np.arange(n)+1)
-    sigmahat2s = (1/4 + np.cumsum((x-muhats)**2))/(np.arange(n)+1)
-    lambdas = np.concatenate([np.array([1,]), np.sqrt(2*np.log(2/alpha)/(n*sigmahat2s))[:-1]]) # can't use last entry
-    def M(m,i): return 1/2*np.maximum(
-        np.prod(1+np.minimum(lambdas[:i], 0.5/mu(m,i))*(x[:i]-mu(m,i))),
-        np.prod(1-np.minimum(lambdas[:i], 0.5/(1-mu(m,i)))*(x[:i]-mu(m,i)))
-    )
+    def mu(m,i): return np.clip((N*m - np.concatenate([np.array([0,]), np.cumsum(x[:i-1])]))/(N - (np.arange(i)+1) + 1 ), 0, None)
+    muhats = (1/2 + np.cumsum(x))/(np.arange(n)+2)
+    sigmahat2s = (1/4 + np.cumsum((x-muhats)**2))/(np.arange(n)+2)
+    sigmahat2s_shifted = np.concatenate([np.array([1/4]), sigmahat2s[:-1]]) # Sigmahats is lagged by 1
+    lambdas = np.sqrt(2*np.log(2/alpha)/(n*sigmahat2s_shifted))
+    def M(m,i):
+        process = 1/2*np.maximum(
+            np.prod(1+np.minimum(lambdas[:i], 0.5/mu(m,i))*(x[:i]-mu(m,i))),
+            np.prod(1-np.minimum(lambdas[:i], 0.5/(1-mu(m,i)))*(x[:i]-mu(m,i)))
+        )
+        return np.clip(process, None, 1/alpha + 0.1)
     M = np.vectorize(M)
     if intersection:
         M_list = Parallel(n_jobs=num_cpus)(delayed(M)(grid,i) for i in range(1,n+1))
+        ci_full = grid[np.where(np.prod(np.stack(M_list, axis=1) < 1/alpha , axis=1))[0]]
     else:
-        M_list =[M(grid, n),]
-    ci_full = grid[np.where(np.prod(np.stack(M_list, axis=1) < 1/alpha , axis=1))[0]]
+        mgrid = M(grid,n)
+        where = np.where(mgrid < 1/alpha)[0]
+        ci_full = grid[where]
     return np.array([ci_full.min(), ci_full.max()]) # only output the interval
