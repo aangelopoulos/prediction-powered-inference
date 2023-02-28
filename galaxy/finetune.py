@@ -7,7 +7,7 @@ import torch.nn as nn
 import torch.optim as optim
 import numpy as np
 import torchvision
-from torchvision import datasets, models, transforms
+from torchvision import models
 import matplotlib.pyplot as plt
 import time
 import os
@@ -15,24 +15,8 @@ import copy
 import pdb
 from tqdm import tqdm
 
-def calc_normalization(datasets):
-    for key in datasets.keys():
-        datasets[key].transform = transforms.ToTensor()
-
-    mu = 0
-    num_samples = 1000
-    for i in tqdm(range(num_samples)):
-        mu += (1/num_samples) * datasets['train'][i][0].mean(axis=[1,2])
-    var = 0
-    for i in range(num_samples):
-        var += (1/num_samples) * ((datasets['train'][i][0] - mu[:,None,None])**2).mean(axis=[1,2])
-    std = np.sqrt(var)
-
-    return mu, std
-
-
 def finetune_resnet(
-        datasets,
+        dataset_dict,
         save_dir,
         num_classes,
         batch_size,
@@ -46,67 +30,49 @@ def finetune_resnet(
     num_ftrs = model.fc.in_features
     model.fc = nn.Linear(num_ftrs, num_classes)
     input_size = 224
+    save_path = save_dir + '/best_wts.pth'
 
-    mu = [0.0419, 0.0406, 0.0244]
-    std = [0.0885, 0.0742, 0.0629]
+    try:
+        model.load_state_dict(torch.load(save_path))
+        return model
+    except:
+        # Detect if we have a GPU available
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-    # Data augmentation and normalization for training
-    # Just normalization for validation
-    datasets['train'].transform = transforms.Compose([
-            transforms.RandomResizedCrop(input_size),
-            transforms.RandomHorizontalFlip(),
-            transforms.ToTensor(),
-            transforms.Normalize(mu, std)
-        ])
-    datasets['val'].transform = transforms.Compose([
-            transforms.RandomResizedCrop(input_size),
-            transforms.RandomHorizontalFlip(),
-            transforms.ToTensor(),
-            transforms.Normalize(mu, std)
-        ])
-    datasets['test'].transform = transforms.Compose([
-            transforms.Resize(input_size),
-            transforms.CenterCrop(input_size),
-            transforms.ToTensor(),
-            transforms.Normalize(mu, std)
-        ])
-    # Create training and validation dataloaders
-    dataloaders_dict = {x: torch.utils.data.DataLoader(datasets[x], batch_size=batch_size, shuffle=True, num_workers=num_workers) for x in ['train', 'val', 'test']}
+        criterion = nn.CrossEntropyLoss()
+        # Send the model to GPU
+        model = model.to(device)
 
-    # Detect if we have a GPU available
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        # Gather the parameters to be optimized/updated in this run. If we are
+        #  finetuning we will be updating all parameters. However, if we are
+        #  doing feature extract method, we will only update the parameters
+        #  that we have just initialized, i.e. the parameters with requires_grad
+        #  is True.
+        params_to_update = model.parameters()
+        print("Params to learn:")
+        if feature_extract:
+            params_to_update = []
+            for name,param in model.named_parameters():
+                if param.requires_grad == True:
+                    params_to_update.append(param)
+                    print("\t",name)
+        else:
+            for name,param in model.named_parameters():
+                if param.requires_grad == True:
+                    print("\t",name)
 
-    criterion = nn.CrossEntropyLoss()
-    # Send the model to GPU
-    model = model.to(device)
+        # Observe that all parameters are being optimized
+        optimizer = optim.Adam(params_to_update, lr=1e-4)
 
-    # Gather the parameters to be optimized/updated in this run. If we are
-    #  finetuning we will be updating all parameters. However, if we are
-    #  doing feature extract method, we will only update the parameters
-    #  that we have just initialized, i.e. the parameters with requires_grad
-    #  is True.
-    params_to_update = model.parameters()
-    print("Params to learn:")
-    if feature_extract:
-        params_to_update = []
-        for name,param in model.named_parameters():
-            if param.requires_grad == True:
-                params_to_update.append(param)
-                print("\t",name)
-    else:
-        for name,param in model.named_parameters():
-            if param.requires_grad == True:
-                print("\t",name)
+        # Create training and validation dataloaders
+        dataloaders_dict = {x: torch.utils.data.DataLoader(dataset_dict[x], batch_size=batch_size, shuffle=True, num_workers=num_workers) for x in ['train', 'val', 'test']}
 
-    # Observe that all parameters are being optimized
-    optimizer = optim.Adam(params_to_update, lr=1e-3)
-
-    model = train_model(model, dataloaders_dict, criterion, optimizer, device, num_epochs=num_epochs)
-    
-    return model 
+        model = train_model(model, dataloaders_dict, criterion, optimizer, device, num_epochs=num_epochs, save_path=save_path)
+        
+        return model 
 
 
-def train_model(model, dataloaders, criterion, optimizer, device, num_epochs=25):
+def train_model(model, dataloaders, criterion, optimizer, device, num_epochs=25, save_path="./best_model.pth"):
     since = time.time()
 
     val_acc_history = []
@@ -166,7 +132,7 @@ def train_model(model, dataloaders, criterion, optimizer, device, num_epochs=25)
             if phase == 'val' and epoch_acc > best_acc:
                 best_acc = epoch_acc
                 best_model_wts = copy.deepcopy(model.state_dict())
-                torch.save(best_model_wts, save_dir + '/best_wts.pth') 
+                torch.save(best_model_wts, save_path) 
             if phase == 'val':
                 val_acc_history.append(epoch_acc)
 
@@ -179,6 +145,30 @@ def train_model(model, dataloaders, criterion, optimizer, device, num_epochs=25)
     # load best model weights
     model.load_state_dict(best_model_wts)
     return model, val_acc_history
+
+def get_all_predictions_and_labels(model, dataset, batch_size, num_workers, save_dir):
+    filename = save_dir + '/curr_data.npz'
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    try:
+        data = np.load(filename)
+        preds = data['preds']
+        labels = data['labels']
+    except:
+        model = model.eval()
+        model = model.to(device)
+        preds = np.zeros((len(dataset),))
+        labels = np.zeros((len(dataset),))
+        i = 0
+        with torch.no_grad():
+            dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+            for inputs, batch_labels in tqdm(dataloader):
+                inputs = inputs.to(device)
+                labels[i:i+inputs.shape[0]] = batch_labels.cpu().numpy()
+                outputs = model(inputs)
+                preds[i:i+inputs.shape[0]] = outputs.softmax(dim=1)[:,1].cpu().numpy()
+                i = i + inputs.shape[0]
+        np.savez(filename, preds=preds, labels=labels)
+    return preds, labels
 
 def set_parameter_requires_grad(model, feature_extracting):
     if feature_extracting:

@@ -31,3 +31,4 @@ dependencies:
       - folktables
       - alphashape
       - threadpoolctl==3.1.0
+      - 'zoobot[pytorch]'
