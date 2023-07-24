@@ -180,10 +180,10 @@ def pp_logistic_interval(X_labeled, X_unlabeled, Y_labeled, Yhat_labeled, Yhat_u
         np.linspace(point_estimate, 3*point_estimate, num_grid//2)[1:]
     ])
 
-    mu = expit(X@theta_grid.T)
-    g = 1/N * X.T@(mu - Yhat[:, None])
+    mu = expit(X_unlabeled@theta_grid.T)
+    g = 1/N * X_unlabeled.T@(mu - Yhat_unlabeled[:, None])
 
-    sigmahat_err = np.std(X[:,:,None]*(mu - Yhat[:,None])[:,None,:], axis=0)
+    sigmahat_err = np.std(X_unlabeled[:,:,None]*(mu - Yhat_unlabeled[:,None])[:,None,:], axis=0)
 
     halfwidth = norm.ppf(1-alpha/(2*d)) * np.sqrt( sigmahat_rec[:,None]**2/n + sigmahat_err**2/N)
 
